@@ -135,7 +135,7 @@ if ($where == '') {
     $where = '1';
 }
 $table->set_sql('*', "{auth_oidc_token}", $where);
-$table->define_baseurl("$CFG->wwwroot/local/oidc/removetoken.php");
+$table->define_baseurl("$CFG->wwwroot/local/o365/removetoken.php");
 $card = $table->out(10, true);
 echo \html_writer::div($card, 'container');
 echo $OUTPUT->footer();
