@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Checks that the system API user can communicate with Microsoft 365.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -23,8 +25,10 @@
 
 namespace local_o365\healthcheck;
 
+defined('MOODLE_INTERNAL') || die();
+
 /**
- * Checks that the system API user can communicate with Office 365
+ * Checks that the system API user can communicate with Microsoft 365.
  */
 class systemapiuser implements \local_o365\healthcheck\healthcheckinterface {
     /**
@@ -40,7 +44,7 @@ class systemapiuser implements \local_o365\healthcheck\healthcheckinterface {
         // Check that the system API user has a graph resource.
         $tokens = get_config('local_o365', 'systemtokens');
         $tokens = unserialize($tokens);
-        $graphresource = 'https://graph.windows.net';
+        $graphresource = \local_o365\rest\unified::get_tokenresource();
         if (!isset($tokens[$graphresource])) {
             return [
                 'result' => false,
@@ -64,10 +68,10 @@ class systemapiuser implements \local_o365\healthcheck\healthcheckinterface {
         $clientdata = new \local_o365\oauth2\clientdata($oidcconfig->clientid, $oidcconfig->clientsecret, $oidcconfig->authendpoint,
                 $oidcconfig->tokenendpoint);
 
-        $resource = (\local_o365\rest\unified::is_configured() === true)
-            ? \local_o365\rest\unified::get_resource()
-            : \local_o365\rest\azuread::get_resource();
-        $systemtoken = \local_o365\oauth2\systemapiusertoken::get_for_new_resource(null, $resource, $clientdata, $httpclient);
+        $tokenresource = (\local_o365\rest\unified::is_configured() === true)
+            ? \local_o365\rest\unified::get_tokenresource()
+            : \local_o365\rest\azuread::get_tokenresource();
+        $systemtoken = \local_o365\oauth2\systemapiusertoken::get_for_new_resource(null, $tokenresource, $clientdata, $httpclient);
         if (empty($systemtoken)) {
             return [
                 'result' => false,

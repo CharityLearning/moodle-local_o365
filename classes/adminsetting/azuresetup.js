@@ -31,7 +31,7 @@ $(function() {
 
             strupdate: 'Update',
             strchecking: 'Checking...',
-            strmissingperms: 'Missing Permissions:',
+            strmissingperms: 'Missing Delegated Permissions:',
             strmissingappperms: 'Missing Application Permissions:',
             strpermscorrect: 'Permissions correct.',
             strapppermscorrect: 'Application Permissions correct.',
@@ -165,7 +165,7 @@ $(function() {
                     if (Object.keys(data.missingappperms).length > 0) {
                         var missingpermsbox = opts.strmissingappperms + '<ul>';
                         for (var perm in data.missingappperms) {
-                            missingpermsbox += '<li>' + data.missingappperms[perm] + '</li>';
+                            missingpermsbox += '<li><b>' + perm + '</b>: ' + data.missingappperms[perm] + '</li>';
                         }
                         missingpermsbox += '</ul>';
                         content.append(main.rendererrorbox(missingpermsbox));
@@ -180,7 +180,7 @@ $(function() {
                     if (Object.keys(data.missingperms).length > 0) {
                         var missingpermsbox = opts.strmissingperms + '<ul>';
                         for (var perm in data.missingperms) {
-                            missingpermsbox += '<li>' + data.missingperms[perm] + '</li>';
+                            missingpermsbox += '<li><b>' + perm + '</b>: ' + data.missingperms[perm] + '</li>';
                         }
                         missingpermsbox += '</ul>';
                         content.append(main.rendererrorbox(missingpermsbox));

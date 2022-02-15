@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Scheduled task to refresh the system API user's refresh token.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -22,6 +24,8 @@
  */
 
 namespace local_o365\task;
+
+defined('MOODLE_INTERNAL') || die();
 
 /**
  * Scheduled task to refresh the system API user's refresh token.
@@ -46,7 +50,7 @@ class refreshsystemrefreshtoken extends \core\task\scheduled_task {
 
         $httpclient = new \local_o365\httpclient();
         $clientdata = \local_o365\oauth2\clientdata::instance_from_oidc();
-        $graphresource = \local_o365\rest\unified::get_resource();
+        $graphresource = \local_o365\rest\unified::get_tokenresource();
         $systemtoken = \local_o365\utils::get_app_or_system_token($graphresource, $clientdata, $httpclient);
         if (!empty($systemtoken)) {
             mtrace('... Success!');

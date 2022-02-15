@@ -15,11 +15,15 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Scheduled and adhoc tasks definition.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @copyright (C) 2014 onwards Microsoft, Inc. (http://microsoft.com/)
  */
+
+defined('MOODLE_INTERNAL') || die();
 
 $tasks = [
     [
@@ -34,7 +38,7 @@ $tasks = [
     [
         'classname' => 'local_o365\task\usersync',
         'blocking' => 0,
-        'minute' => '*',
+        'minute' => '0',
         'hour' => '1',
         'day' => '*',
         'dayofweek' => '*',
@@ -72,6 +76,15 @@ $tasks = [
         'blocking' => 0,
         'minute' => '1',
         'hour' => '3',
+        'day' => '*',
+        'dayofweek' => '*',
+        'month' => '*'
+    ],
+    [
+        'classname' => 'local_o365\task\bot',
+        'blocking' => 0,
+        'minute' => '3',
+        'hour' => '*',
         'day' => '*',
         'dayofweek' => '*',
         'month' => '*'

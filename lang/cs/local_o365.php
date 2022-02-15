@@ -15,12 +15,17 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Czech language strings.
+ *
  * @package local_o365
+ * @author James McQuillan <james.mcquillan@remote-learner.net>
+ * @author Lai Wei <lai.wei@enovation.ie>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @copyright (C) 2014 onwards Microsoft, Inc. (http://microsoft.com/)
  */
 
-$string['pluginname'] = 'Integrace Microsoft Office 365';
-$string['acp_title'] = 'Ovládací panel správy Office 365';
+$string['pluginname'] = 'Integrace Microsoft 365';
+$string['acp_title'] = 'Ovládací panel správy Microsoft 365';
 $string['acp_healthcheck'] = 'Kontrola stavu';
 $string['acp_parentsite_name'] = 'Moodle';
 $string['acp_parentsite_desc'] = 'Web pro sdílená data kurzu Moodle.';
@@ -51,16 +56,16 @@ $string['eventcalendarsubscribed'] = 'Uživatel se přihlásil k odběru kalend�
 $string['eventcalendarunsubscribed'] = 'Uživatel zrušil odběr kalendáře';
 $string['healthcheck_fixlink'] = 'Klikněte sem a opravte to.';
 $string['healthcheck_systemapiuser_title'] = 'Uživatel systémového rozhraní API';
-$string['healthcheck_systemtoken_result_notoken'] = 'Moodle nemá token, aby mohl komunikovat s Office 365 jako uživatel systémového rozhraní API. Tento problém lze obvykle vyřešit resetováním uživatele systémového rozhraní API.';
-$string['healthcheck_systemtoken_result_noclientcreds'] = 'V pluginu OpenID Connect nejsou žádné přihlašovací údaje aplikace. Bez těchto přihlašovacích údajů nemůže Moodle provádět žádnou komunikaci s Office 365. Kliknutím sem přejděte na stránku nastavení a zadejte své přihlašovací údaje.';
-$string['healthcheck_systemtoken_result_badtoken'] = 'Nastal problém při komunikaci s Office 365 jako uživatel systémového rozhraní API. Tento problém lze obvykle vyřešit resetováním uživatele systémového rozhraní API.';
-$string['healthcheck_systemtoken_result_passed'] = 'Moodle může komunikovat s Office 365 jako uživatel systémového rozhraní API.';
+$string['healthcheck_systemtoken_result_notoken'] = 'Moodle nemá token, aby mohl komunikovat s Microsoft 365 jako uživatel systémového rozhraní API. Tento problém lze obvykle vyřešit resetováním uživatele systémového rozhraní API.';
+$string['healthcheck_systemtoken_result_noclientcreds'] = 'V pluginu OpenID Connect nejsou žádné přihlašovací údaje aplikace. Bez těchto přihlašovacích údajů nemůže Moodle provádět žádnou komunikaci s Microsoft 365. Kliknutím sem přejděte na stránku nastavení a zadejte své přihlašovací údaje.';
+$string['healthcheck_systemtoken_result_badtoken'] = 'Nastal problém při komunikaci s Microsoft 365 jako uživatel systémového rozhraní API. Tento problém lze obvykle vyřešit resetováním uživatele systémového rozhraní API.';
+$string['healthcheck_systemtoken_result_passed'] = 'Moodle může komunikovat s Microsoft 365 jako uživatel systémového rozhraní API.';
 $string['settings_aadsync'] = 'Synchronizovat uživatele s Azure AD';
 $string['settings_aadsync_details'] = 'Když je toto nastavení povoleno, uživatelé Moodle a Azure AD jsou synchronizovány podle možností výše.<br /><br /><b>Poznámka: </b>Úloha synchronizace běží v procesu cron v Moodlu a synchronizuje vždy 1000 uživatelů současně. Ve výchozím nastavení se spouští jednou denně v 01:00 časového pásma vašeho serveru. Chcete-li synchronizovat větší množství uživatelů rychleji, můžete zvýšit frekvenci spouštění úlohy <b>Synchronizovat uživatele s Azure AD</b> pomocí <a href="{$a}">stránky správy naplánovaných úloh.</a><br /><br />Podrobnější pokyny naleznete v <a href="https://docs.moodle.org/30/en/Office365#User_sync">dokumentaci k synchronizaci uživatelů</a><br /><br />';
 $string['settings_aadsync_create'] = 'Vytvořit účty v Moodlu pro uživatele v Azure AD';
 $string['settings_aadsync_delete'] = 'Odstranit dříve synchronizované účty v Moodlu, když jsou odstraněny z Azure AD';
-$string['settings_aadsync_match'] = 'Spárovat už existující uživatele Moodlu s účty se stejnými názvy v Azure AD<br /><small>Proces se podívá na uživatelské jméno v  Office 365 a uživatelské jméno v Moodlu a pokusí se najít odpovídající (shodující se) jména. Při posuzování shody se nerozlišují malá a velká písmena a ignoruje se nájemce Office 365. Například BoB.SmiTh v Moodlu by bylo vyhodnoceno jako shodující se s bob.smith@example.onmicrosoft.com. Spárováním uživatelů dojde k propojení jejich účtů Moodle a Office a budou moci používat všechny funkce integrace Office 365/Moodle. Metoda ověření uživatele se nezmění, pokud není povoleno následující nastavení. </small>';
-$string['settings_aadsync_matchswitchauth'] = 'Přepnout spárované uživatele na ověřování Office 365 (OpenID Connect)<br /><small>Tato možnost požaduje, aby bylo povoleno nastavení spárování výše. Když je uživatel spárován, povolením tohoto nastavení dojde k přepnutí jeho metody ověření na OpenID Connect. Bude se pak přihlašovat do Moodlu se svými přihlašovacími údaji pro Office 365. <b>Poznámka:</b> Pokud chcete použít toto nastavení, zajistěte, aby byl povolen plugin pro ověřování OpenID Connect.</small>';
+$string['settings_aadsync_match'] = 'Spárovat už existující uživatele Moodlu s účty se stejnými názvy v Azure AD<br /><small>Proces se podívá na uživatelské jméno v  Microsoft 365 a uživatelské jméno v Moodlu a pokusí se najít odpovídající (shodující se) jména. Při posuzování shody se nerozlišují malá a velká písmena a ignoruje se nájemce Microsoft 365. Například BoB.SmiTh v Moodlu by bylo vyhodnoceno jako shodující se s bob.smith@example.onmicrosoft.com. Spárováním uživatelů dojde k propojení jejich účtů Moodle a Office a budou moci používat všechny funkce integrace Microsoft 365/Moodle. Metoda ověření uživatele se nezmění, pokud není povoleno následující nastavení. </small>';
+$string['settings_aadsync_matchswitchauth'] = 'Přepnout spárované uživatele na ověřování Microsoft 365 (OpenID Connect)<br /><small>Tato možnost požaduje, aby bylo povoleno nastavení spárování výše. Když je uživatel spárován, povolením tohoto nastavení dojde k přepnutí jeho metody ověření na OpenID Connect. Bude se pak přihlašovat do Moodlu se svými přihlašovacími údaji pro Microsoft 365. <b>Poznámka:</b> Pokud chcete použít toto nastavení, zajistěte, aby byl povolen plugin pro ověřování OpenID Connect.</small>';
 $string['settings_aadtenant'] = 'Nájemce Azure AD';
 $string['settings_aadtenant_details'] = 'Slouží k identifikaci vaší organizace v Azure AD. Příklad: „contoso.onmicrosoft.com“';
 $string['settings_azuresetup'] = 'Nastavení Azure';
@@ -75,17 +80,17 @@ $string['settings_azuresetup_unifieddesc'] = 'Sjednocené rozhraní API nahrazuj
 $string['settings_azuresetup_unifiederror'] = 'Při kontrole podpory sjednoceného rozhraní API došlo k chybě.';
 $string['settings_azuresetup_unifiedactive'] = 'Sjednocené rozhraní API je aktivní.';
 $string['settings_azuresetup_unifiedmissing'] = 'Sjednocené rozhraní API nebylo v této aplikaci nalezeno.';
-$string['settings_azuresetup_legacyheader'] = 'Office 365 API';
-$string['settings_azuresetup_legacydesc'] = 'Rozhraní Office 365 API se skládá z rozhraní API specifických pro aplikace.';
-$string['settings_azuresetup_legacyerror'] = 'Při kontrole nastavení rozhraní Office 365 API došlo k chybě.';
+$string['settings_azuresetup_legacyheader'] = 'Microsoft 365 API';
+$string['settings_azuresetup_legacydesc'] = 'Rozhraní Microsoft 365 API se skládá z rozhraní API specifických pro aplikace.';
+$string['settings_azuresetup_legacyerror'] = 'Při kontrole nastavení rozhraní Microsoft 365 API došlo k chybě.';
 $string['settings_creategroups'] = 'Vytvořit skupiny uživatelů';
-$string['settings_creategroups_details'] = 'Pokud je toto nastavení povoleno, vytvoří a bude udržovat v Office 365 skupinu učitele a studentů pro každý kurz na webu. Při každém spuštění procesu cron dojde k vytvoření potřebných skupin (a přidání všech aktuálních členů). Následně probíhá údržba členství ve skupině podle toho, jak se uživatelé registrují nebo ruší registraci v kurzech v Moodlu.<br /><b>Poznámka: </b>Tato funkce vyžaduje, aby do aplikace přidané v Azure bylo přidáno sjednocené rozhraní API Office 365. <a href="https://docs.moodle.org/30/en/Office365#User_groups">Pokyny a dokumentace k nastavení.</a>';
-$string['settings_o365china'] = 'Office 365 pro Čínu';
-$string['settings_o365china_details'] = 'Toto políčko zaškrtněte, pokud používáte Office 365 pro Čínu.';
+$string['settings_creategroups_details'] = 'Pokud je toto nastavení povoleno, vytvoří a bude udržovat v Microsoft 365 skupinu učitele a studentů pro každý kurz na webu. Při každém spuštění procesu cron dojde k vytvoření potřebných skupin (a přidání všech aktuálních členů). Následně probíhá údržba členství ve skupině podle toho, jak se uživatelé registrují nebo ruší registraci v kurzech v Moodlu.<br /><b>Poznámka: </b>Tato funkce vyžaduje, aby do aplikace přidané v Azure bylo přidáno sjednocené rozhraní API Microsoft 365. <a href="https://docs.moodle.org/30/en/Office365#User_groups">Pokyny a dokumentace k nastavení.</a>';
+$string['settings_o365china'] = 'Microsoft 365 pro Čínu';
+$string['settings_o365china_details'] = 'Toto políčko zaškrtněte, pokud používáte Microsoft 365 pro Čínu.';
 $string['settings_debugmode'] = 'Zaznamenávat zprávy ladění';
 $string['settings_debugmode_details'] = 'Pokud je toto nastavení povoleno, do protokolu Moodlu jsou zaznamenávány informace, které vám mohou pomoci identifikovat problémy.';
 $string['settings_detectoidc'] = 'Přihlašovací údaje aplikace';
-$string['settings_detectoidc_details'] = 'Moodle potřebuje ke komunikace s Office 365 přihlašovací údaje, aby sám sebe identifikoval. Ty se nastavují v pluginu pro ověření OpenID Connect.';
+$string['settings_detectoidc_details'] = 'Moodle potřebuje ke komunikace s Microsoft 365 přihlašovací údaje, aby sám sebe identifikoval. Ty se nastavují v pluginu pro ověření OpenID Connect.';
 $string['settings_detectoidc_credsvalid'] = 'Přihlašovací údaje byly nastaveny.';
 $string['settings_detectoidc_credsvalid_link'] = 'Změnit';
 $string['settings_detectoidc_credsinvalid'] = 'Přihlašovací údaje nebyly nastaveny nebo jsou neúplné.';
@@ -102,8 +107,6 @@ $string['settings_detectperms_unifiednomissing'] = 'Všechna sjednocená oprávn
 $string['settings_detectperms_update'] = 'Aktualizovat';
 $string['settings_detectperms_valid'] = 'Oprávnění byla nastavena.';
 $string['settings_detectperms_invalid'] = 'Zkontrolovat oprávnění v Azure AD';
-$string['settings_enableunifiedapi'] = 'Povolit sjednocené rozhraní API';
-$string['settings_enableunifiedapi_details'] = 'Sjednocené rozhraní API je ukázkové rozhraní API, které poskytuje některé nové funkce, například níže uvedené nastavení Vytvořit skupiny uživatelů. V budoucnu nahradí rozhraní Office API, která jsou specifická po aplikace, zatím jde ale stále o zkušební ukázku a může docházet k jeho změnám, což může mít dopad na některé funkce (budou fungovat jinak nebo úplně přestanou fungovat). Pokud ho chcete vyzkoušet, povolte toto nastavení a klikněte na Uložit změny. V Azure přidejte do své aplikace Unified API (Sjednocené rozhraní API) a potom se vraťte sem a spusťte níže nástroj Nastavení Azure.';
 $string['settings_header_setup'] = 'Nastavení';
 $string['settings_header_options'] = 'Možnosti';
 $string['settings_healthcheck'] = 'Kontrola stavu';
@@ -135,7 +138,7 @@ $string['settings_systemapiuser_setuser'] = 'Nastavit uživatele';
 $string['spsite_group_contributors_name'] = 'Přispěvatelé kurzu {$a}';
 $string['spsite_group_contributors_desc'] = 'Všichni uživatelé, kteří mají přístup pro správu souborů pro kurz {$a}';
 $string['task_calendarsyncin'] = 'Synchronizovat události o365 do Moodlu';
-$string['task_groupcreate'] = 'Vytvořit skupiny uživatelů v Office 365';
+$string['task_groupcreate'] = 'Vytvořit skupiny uživatelů v Microsoft 365';
 $string['task_refreshsystemrefreshtoken'] = 'Obnovit token obnovení uživatele systémového rozhraní API';
 $string['task_syncusers'] = 'Synchronizovat uživatele s Azure AD.';
 $string['task_sharepointinit'] = 'Inicializovat SharePoint.';
@@ -143,24 +146,24 @@ $string['ucp_connectionstatus'] = 'Stav připojení';
 $string['ucp_calsync_availcal'] = 'Dostupné kalendáře Moodle';
 $string['ucp_calsync_title'] = 'Synchronizace kalendáře Outlook';
 $string['ucp_calsync_desc'] = 'Zaškrtnuté kalendáře budou synchronizovány z Moodlu do vašeho kalendáře Outlook.';
-$string['ucp_connection_status'] = 'Připojení Office 365 je:';
-$string['ucp_connection_start'] = 'Připojit k Office 365';
-$string['ucp_connection_stop'] = 'Odpojit od Office 365';
-$string['ucp_features'] = 'Funkce Office 365';
-$string['ucp_features_intro'] = 'Níže naleznete seznam funkcí, které můžete použít ke zlepšení práce v Moodlu s Office 365.';
-$string['ucp_features_intro_notconnected'] = 'Některé z nich nemusí být k dispozici, dokud se nepřipojíte k Office 365.';
-$string['ucp_general_intro'] = 'Zde můžete spravovat svoje připojení k Office 365.';
-$string['ucp_index_aadlogin_title'] = 'Přihlášení Office 365';
-$string['ucp_index_aadlogin_desc'] = 'Můžete používat své přihlašovací údaje Office 365 k přihlašování do Moodlu.';
+$string['ucp_connection_status'] = 'Připojení Microsoft 365 je:';
+$string['ucp_connection_start'] = 'Připojit k Microsoft 365';
+$string['ucp_connection_stop'] = 'Odpojit od Microsoft 365';
+$string['ucp_features'] = 'Funkce Microsoft 365';
+$string['ucp_features_intro'] = 'Níže naleznete seznam funkcí, které můžete použít ke zlepšení práce v Moodlu s Microsoft 365.';
+$string['ucp_features_intro_notconnected'] = 'Některé z nich nemusí být k dispozici, dokud se nepřipojíte k Microsoft 365.';
+$string['ucp_general_intro'] = 'Zde můžete spravovat svoje připojení k Microsoft 365.';
+$string['ucp_index_aadlogin_title'] = 'Přihlášení Microsoft 365';
+$string['ucp_index_aadlogin_desc'] = 'Můžete používat své přihlašovací údaje Microsoft 365 k přihlašování do Moodlu.';
 $string['ucp_index_calendar_title'] = 'Synchronizace kalendáře Outlook';
 $string['ucp_index_calendar_desc'] = 'Zde můžete nastavit synchronizaci mezi vašimi kalendáři Moodle a Outlook. Můžete exportovat události z kalendáře Moodle do Outlooku a naopak přenést události z Outlooku do Moodlu.';
-$string['ucp_index_connectionstatus_connected'] = 'Aktuálně jste připojeni k Office 365';
-$string['ucp_index_connectionstatus_matched'] = 'Byli jste spárováni s uživatelem <small>„{$a}“</small> v Office 365. Chcete-li propojení dokončit, klikněte na následující odkaz a přihlaste se do Office 365.';
-$string['ucp_index_connectionstatus_notconnected'] = 'Aktuálně nejste připojeni k Office 365';
+$string['ucp_index_connectionstatus_connected'] = 'Aktuálně jste připojeni k Microsoft 365';
+$string['ucp_index_connectionstatus_matched'] = 'Byli jste spárováni s uživatelem <small>„{$a}“</small> v Microsoft 365. Chcete-li propojení dokončit, klikněte na následující odkaz a přihlaste se do Microsoft 365.';
+$string['ucp_index_connectionstatus_notconnected'] = 'Aktuálně nejste připojeni k Microsoft 365';
 $string['ucp_index_onenote_title'] = 'OneNote';
-$string['ucp_index_onenote_desc'] = 'Integrace OneNote vám umožňuje používat Office 365 OneNote s Moodlem. Můžete pomocí OneNote vypracovávat úkoly a snadno si dělat poznámky ve svých kurzech.';
-$string['ucp_notconnected'] = 'Před navštívením této stránky se připojte k Office 365.';
-$string['settings_onenote'] = 'Zakázat Office 365 OneNote';
+$string['ucp_index_onenote_desc'] = 'Integrace OneNote vám umožňuje používat Microsoft 365 OneNote s Moodlem. Můžete pomocí OneNote vypracovávat úkoly a snadno si dělat poznámky ve svých kurzech.';
+$string['ucp_notconnected'] = 'Před navštívením této stránky se připojte k Microsoft 365.';
+$string['settings_onenote'] = 'Zakázat Microsoft 365 OneNote';
 $string['ucp_status_enabled'] = 'Aktivní';
 $string['ucp_status_disabled'] = 'Nepřipojeno';
 $string['ucp_syncwith_title'] = 'Synchronizovat s:';
@@ -168,5 +171,5 @@ $string['ucp_syncdir_title'] = 'Chování synchronizace:';
 $string['ucp_syncdir_out'] = 'Z Moodlu do Outlooku';
 $string['ucp_syncdir_in'] = 'Z Outlooku do Moodlu';
 $string['ucp_syncdir_both'] = 'Aktualizovat Outlook i Moodle';
-$string['ucp_title'] = 'Ovládací panel Office 365 / Moodle';
+$string['ucp_title'] = 'Ovládací panel Microsoft 365 / Moodle';
 $string['ucp_options'] = 'Možnosti';

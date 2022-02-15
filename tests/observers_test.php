@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Test cases for observer functions.
+ *
  * @package local_o365
  * @author Remote-Learner.net Inc
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -22,8 +24,6 @@
  */
 
 defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
 
 /**
  * Tests event observers.
@@ -36,7 +36,7 @@ class local_o365_observers_testcase extends \advanced_testcase {
     /**
      * Perform setup before every test. This tells Moodle's phpunit to reset the database after every test.
      */
-    protected function setUp() {
+    protected function setUp() : void {
         parent::setUp();
         $this->resetAfterTest(true);
     }
@@ -68,14 +68,16 @@ class local_o365_observers_testcase extends \advanced_testcase {
     }
 
     /**
-     * Create office 365 entities.
+     * Create Microsoft 365 entities.
+     *
+     * @param int $userid
      */
-    function create_member_entities($userid) {
+    public function create_member_entities($userid) {
         global $DB;
         $token = (object)[
             'user_id' => $userid,
             'scope' => 'scope',
-            'resource' => 'resource',
+            'tokenresource' => 'resource',
             'token' => rand() * 1000,
             'expiry' => time() + 1000000,
             'refreshtoken' => time() + 100000,
@@ -104,10 +106,10 @@ class local_o365_observers_testcase extends \advanced_testcase {
     /**
      * Test if user has any entities.
      *
-     * @param int $userid User id to check for office 365 entities.
+     * @param int $userid User id to check for Microsoft 365 entities.
      * @return boolean Returns true if any entities exist for user.
      */
-    function has_member_entities($userid) {
+    public function has_member_entities($userid) {
         global $DB;
         $result = $DB->count_records('local_o365_token', ['user_id' => $userid]);
         $result = $result || $DB->count_records('local_o365_objects', ['type' => 'user', 'moodleid' => $userid]);

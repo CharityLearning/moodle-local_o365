@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * API client for o365 onedrive.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -23,16 +25,25 @@
 
 namespace local_o365\rest;
 
+defined('MOODLE_INTERNAL') || die();
+
 /**
  * API client for o365 onedrive.
  */
 class onedrive extends \local_o365\rest\o365api {
-    /** The general API area of the class. */
+    /**
+     * @var string The general API area of the class.
+     */
     public $apiarea = 'onedrive';
 
-    /** @var string An override for the API url. */
+    /**
+     * @var string An override for the API url.
+     */
     protected $apiurioverride = null;
 
+    /**
+     * @var bool
+     */
     public $usespapi = false;
 
     /**
@@ -69,7 +80,7 @@ class onedrive extends \local_o365\rest\o365api {
      *
      * @return string The resource for oauth2 tokens.
      */
-    public static function get_resource() {
+    public static function get_tokenresource() {
         $config = get_config('local_o365');
         if (!empty($config->odburl)) {
             return 'https://'.$config->odburl;
@@ -93,7 +104,7 @@ class onedrive extends \local_o365\rest\o365api {
             }
         }
         if (!empty($fileurl)) {
-            $odburl = $this->get_resource();
+            $odburl = $this->get_tokenresource();
             if (strpos($fileurl, $odburl) === 0) {
                 $filerelative = substr($fileurl, strlen($odburl));
                 $filerelativeparts = explode('/', trim($filerelative, '/'));
@@ -122,9 +133,9 @@ class onedrive extends \local_o365\rest\o365api {
             return $this->apiurioverride;
         }
         if ($this->usespapi === true) {
-            return static::get_resource().'/_api';
+            return static::get_tokenresource().'/_api';
         } else {
-            return static::get_resource().'/_api/v1.0/me/Files';
+            return static::get_tokenresource().'/_api/v1.0/me/Files';
         }
     }
 

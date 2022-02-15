@@ -1,3 +1,4 @@
+<?php
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -14,37 +15,35 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Single team connection form.
+ *
  * @package local_o365
- * @author James McQuillan <james.mcquillan@remote-learner.net>
+ * @author Lai Wei <lai.wei@enovation.ie>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @copyright (C) 2014 onwards Microsoft, Inc. (http://microsoft.com/)
  */
 
-$(function() {
+namespace local_o365\form;
 
-    $.fn.fieldmap = function(options) {
-        var defaultopts = {};
-        var opts = $.extend({}, defaultopts, options);
-        var main = this;
-        console.log(main);
+defined('MOODLE_INTERNAL') || die();
 
-        this.addrow = function() {
-            var row = main.find('textarea.maptpl').val();
-            main.find('table.fieldlist').append(row);
-        }
+global $CFG;
 
-        this.init = function() {
-            main.find('button.addmapping').click(function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                main.addrow();
-            });
-            main.find('table.fieldlist').on('click', 'button.removerow', function(e) {
-                $(this).parents('tr').remove();
-            });
-        }
+require_once($CFG->dirroot.'/lib/formslib.php');
 
-        this.init();
+/**
+ * Single Teams connection form.
+ */
+class teamsconnection extends \moodleform {
+    /**
+     * Form definition.
+     */
+    protected function definition() {
+        $mform = &$this->_form;
+
+        $mform->addElement('select', 'team', get_string('acp_teamconnections_form_team', 'local_o365'),
+            $this->_customdata['teamsoptions']);
+
+        $this->add_action_buttons();
     }
-
-});
+}

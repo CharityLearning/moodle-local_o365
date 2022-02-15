@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Admin setting to control field mappings for users.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -23,7 +25,10 @@
 
 namespace local_o365\adminsetting;
 
+defined('MOODLE_INTERNAL') || die();
+
 global $CFG;
+
 require_once($CFG->dirroot.'/lib/adminlib.php');
 
 /**
@@ -43,23 +48,25 @@ class usersynccreationrestriction extends \admin_setting {
         global $DB;
 
         $this->remotefields = [
-            'objectId' => get_string('settings_fieldmap_field_objectId', 'local_o365'),
-            'displayName' => get_string('settings_fieldmap_field_displayName', 'local_o365'),
-            'givenName' => get_string('settings_fieldmap_field_givenName', 'local_o365'),
-            'surname' => get_string('settings_fieldmap_field_surname', 'local_o365'),
-            'mail' => get_string('settings_fieldmap_field_mail', 'local_o365'),
-            'streetAddress' => get_string('settings_fieldmap_field_streetAddress', 'local_o365'),
-            'city' => get_string('settings_fieldmap_field_city', 'local_o365'),
-            'postalCode' => get_string('settings_fieldmap_field_postalCode', 'local_o365'),
-            'state' => get_string('settings_fieldmap_field_state', 'local_o365'),
-            'country' => get_string('settings_fieldmap_field_country', 'local_o365'),
-            'jobTitle' => get_string('settings_fieldmap_field_jobTitle', 'local_o365'),
-            'department' => get_string('settings_fieldmap_field_department', 'local_o365'),
-            'companyName' => get_string('settings_fieldmap_field_companyName', 'local_o365'),
-            'telephoneNumber' => get_string('settings_fieldmap_field_telephoneNumber', 'local_o365'),
-            'facsimileTelephoneNumber' => get_string('settings_fieldmap_field_facsimileTelephoneNumber', 'local_o365'),
-            'mobile' => get_string('settings_fieldmap_field_mobile', 'local_o365'),
-            'preferredLanguage' => get_string('settings_fieldmap_field_preferredLanguage', 'local_o365'),
+            'objectId' => get_string('settings_fieldmap_field_objectId', 'auth_oidc'),
+            'userPrincipalName' => get_string('settings_fieldmap_field_userPrincipalName', 'auth_oidc'),
+            'displayName' => get_string('settings_fieldmap_field_displayName', 'auth_oidc'),
+            'givenName' => get_string('settings_fieldmap_field_givenName', 'auth_oidc'),
+            'surname' => get_string('settings_fieldmap_field_surname', 'auth_oidc'),
+            'mail' => get_string('settings_fieldmap_field_mail', 'auth_oidc'),
+            'streetAddress' => get_string('settings_fieldmap_field_streetAddress', 'auth_oidc'),
+            'city' => get_string('settings_fieldmap_field_city', 'auth_oidc'),
+            'postalCode' => get_string('settings_fieldmap_field_postalCode', 'auth_oidc'),
+            'state' => get_string('settings_fieldmap_field_state', 'auth_oidc'),
+            'country' => get_string('settings_fieldmap_field_country', 'auth_oidc'),
+            'jobTitle' => get_string('settings_fieldmap_field_jobTitle', 'auth_oidc'),
+            'department' => get_string('settings_fieldmap_field_department', 'auth_oidc'),
+            'companyName' => get_string('settings_fieldmap_field_companyName', 'auth_oidc'),
+            'telephoneNumber' => get_string('settings_fieldmap_field_telephoneNumber', 'auth_oidc'),
+            'faxNumber' => get_string('settings_fieldmap_field_faxNumber', 'auth_oidc'),
+            'mobile' => get_string('settings_fieldmap_field_mobile', 'auth_oidc'),
+            'preferredLanguage' => get_string('settings_fieldmap_field_preferredLanguage', 'auth_oidc'),
+            'employeeId' => get_string('settings_fieldmap_field_employeeId', 'auth_oidc'),
             'o365group' => get_string('settings_usersynccreationrestriction_o365group', 'local_o365'),
         ];
 
@@ -90,7 +97,12 @@ class usersynccreationrestriction extends \admin_setting {
             $this->config_write($this->name, serialize($newconfig));
             return '';
         }
-        $newconfig = ['remotefield' => $data['remotefield'], 'value' => $data['value']];
+
+        $newconfig = [
+            'remotefield' => $data['remotefield'],
+            'value' => $data['value'],
+            'useregex' => (!empty($data['useregex'])) ? true : false,
+        ];
         $this->config_write($this->name, serialize($newconfig));
         return '';
     }
@@ -98,7 +110,9 @@ class usersynccreationrestriction extends \admin_setting {
     /**
      * Return an XHTML string for the setting.
      *
-     * @return string Returns an XHTML string
+     * @param mixed $data
+     * @param string $query
+     * @return string
      */
     public function output_html($data, $query = '') {
         global $DB, $OUTPUT;
@@ -106,19 +120,53 @@ class usersynccreationrestriction extends \admin_setting {
         if (empty($data) || !is_array($data)) {
             $data = [];
         }
-        $remotefield = (isset($data['remotefield']) && isset($this->remotefields[$data['remotefield']])) ? $data['remotefield'] : '';
+        $remotefield = (isset($data['remotefield']) && isset($this->remotefields[$data['remotefield']])) ?
+            $data['remotefield'] : '';
         $value = (isset($data['value'])) ? $data['value'] : '';
+        $useregex = (!empty($data['useregex'])) ? true : false;
 
         $html = \html_writer::start_tag('div');
+        $onchange = 'document.getElementById(\'usercreationrestriction_useregex_wrapper\').style.visibility ' .
+            '= (this.value == \'o365group\') ? \'hidden\' : \'visible\'';
+        $selectattrs = [
+            'style' => 'width: 250px;vertical-align: top;margin-right: 0.25rem;margin-top:0.25rem;',
+            'onchange' => $onchange,
+        ];
+        $html .= \html_writer::select($this->remotefields,
+            $this->get_full_name().'[remotefield]', $remotefield, ['' => 'choosedots'], $selectattrs);
 
-        $html .= \html_writer::select($this->remotefields, $this->get_full_name().'[remotefield]', $remotefield);
-
+        $inputdivattrs = ['style' => 'display:inline-block;margin-top:0.25rem;'];
+        $html .= \html_writer::start_tag('div', $inputdivattrs);
         $inputattrs = [
             'type' => 'text',
             'name' => $this->get_full_name().'[value]',
+            'placeholder' => get_string('settings_usersynccreationrestriction_fieldval', 'local_o365'),
+            'class' => 'form-control',
+            'style' => 'width: 250px;display:inline-block;',
             'value' => $value,
         ];
         $html .= \html_writer::empty_tag('input', $inputattrs);
+        $html .= \html_writer::empty_tag('br');
+        $regexwrapperattrs = [
+            'id' => 'usercreationrestriction_useregex_wrapper',
+            'style' => ($remotefield == 'o365group') ? 'visibility: hidden' : '',
+        ];
+        $html .= \html_writer::start_tag('div', $regexwrapperattrs);
+        $inputattrs = [
+            'type' => 'checkbox',
+            'id' => 'usercreationrestriction_useregex',
+            'name' => $this->get_full_name().'[useregex]',
+            'value' => '1',
+        ];
+        if ($useregex === true) {
+            $inputattrs['checked'] = 'checked';
+        }
+        $html .= \html_writer::empty_tag('input', $inputattrs);
+        $html .= ' ';
+        $regexstr = get_string('settings_usersynccreationrestriction_regex', 'local_o365');
+        $html .= \html_writer::tag('label', $regexstr, ['for' => 'usercreationrestriction_useregex', 'style' => 'margin:0']);
+        $html .= \html_writer::end_tag('div');
+        $html .= \html_writer::end_tag('div');
 
         $html .= \html_writer::end_tag('div');
 

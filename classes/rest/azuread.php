@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * API client for Azure AD graph.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -23,14 +25,20 @@
 
 namespace local_o365\rest;
 
+defined('MOODLE_INTERNAL') || die();
+
 /**
  * API client for Azure AD graph.
  */
 class azuread extends \local_o365\rest\o365api {
-    /** The general API area of the class. */
+    /**
+     * @var string The general API area of the class.
+     */
     public $apiarea = 'directory';
 
-    /** @var string A value to use for the Azure AD tenant. If null, will use value from local_o365/aadtenant config setting. */
+    /**
+     * @var string A value to use for the Azure AD tenant. If null, will use value from local_o365/aadtenant config setting.
+     */
     protected $tenantoverride = null;
 
     /**
@@ -48,8 +56,13 @@ class azuread extends \local_o365\rest\o365api {
      *
      * @return string The resource for oauth2 tokens.
      */
-    public static function get_resource() {
-        return 'https://graph.windows.net';
+    public static function get_tokenresource() {
+        $oidcresource = get_config('auth_oidc', 'oidcresource');
+        if (!empty($oidcresource)) {
+            return $oidcresource;
+        } else {
+            return (static::use_chinese_api() === true) ? 'https://microsoftgraph.chinacloudapi.cn' : 'https://graph.microsoft.com';
+        }
     }
 
     /**
@@ -100,7 +113,7 @@ class azuread extends \local_o365\rest\o365api {
         }
 
         if (!empty($tenant)) {
-            return static::get_resource().'/'.$tenant;
+            return static::get_tokenresource().'/'.$tenant;
         } else {
             return false;
         }
@@ -186,8 +199,8 @@ class azuread extends \local_o365\rest\o365api {
 
         // Determine whether we have write permissions.
         $writeappid = $allappdata['Microsoft.Azure.ActiveDirectory']['appId'];
-        $writepermid = isset($allappdata['Microsoft.Azure.ActiveDirectory']['perms']['Directory.ReadWrite.All']['id'])
-            ? $allappdata['Microsoft.Azure.ActiveDirectory']['perms']['Directory.ReadWrite.All']['id'] : null;
+        $writepermid = isset($allappdata['Microsoft.Azure.ActiveDirectory']['perms']['Directory.ReadWrite.All']['id']) ?
+            $allappdata['Microsoft.Azure.ActiveDirectory']['perms']['Directory.ReadWrite.All']['id'] : null;
         $haswrite = (!empty($writepermid) && !empty($currentperms[$writeappid][$writepermid])) ? true : false;
         $canfix = ($haswrite === true) ? true : false;
 
@@ -276,6 +289,7 @@ class azuread extends \local_o365\rest\o365api {
      *
      * @param int $muserid Moodle userid.
      * @param string $userid Azure object id for user.
+     * @param string $appobjectid
      * @return array|null Array of result, or null if error.
      */
     public function assign_user($muserid, $userid, $appobjectid) {
@@ -376,10 +390,7 @@ class azuread extends \local_o365\rest\o365api {
         if ($params === 'default') {
             $params = ['mail', 'city', 'country', 'department', 'givenName', 'surname', 'preferredLanguage', 'userPrincipalName'];
         }
-        if (empty($skiptoken) || !is_string($skiptoken)) {
-            $skiptoken = '';
-        }
-        if (!empty($params) && is_array($params)) {
+        if (!empty($skiptoken) && is_string($skiptoken) && !empty($params) && is_array($params)) {
             $endpoint .= '?$skiptoken='.$skiptoken;
         }
         $response = $this->apicall('get', $endpoint);
@@ -441,10 +452,11 @@ class azuread extends \local_o365\rest\o365api {
             return $userobjectdata->o365name;
         } else {
             // Get user data.
-            $authoidcuserdata = $DB->get_record('auth_oidc_token', ['username' => $user->username]);
-            if (empty($authoidcuserdata)) {
-                // No data for the user in the OIDC token table. Can't proceed.
-                \local_o365\utils::debug('No oidc token found for user.', 'rest\azuread\get_muser_upn', $user->username);
+            $o365user = \local_o365\obj\o365user::instance_from_muserid($user->id);
+            if (empty($o365user)) {
+                // No o365 user data for the user is available.
+                \local_o365\utils::debug('Could not construct o365user class for user.', 'rest\azuread\get_muser_upn',
+                    $user->username);
                 return false;
             }
             $httpclient = new \local_o365\httpclient();
@@ -454,10 +466,10 @@ class azuread extends \local_o365\rest\o365api {
                 \local_o365\utils::debug($e->getMessage(), 'rest\azuread\get_muser_upn', $e);
                 return false;
             }
-            $resource = static::get_resource();
-            $token = \local_o365\utils::get_app_or_system_token($resource, $clientdata, $httpclient);
+            $tokenresource = static::get_tokenresource();
+            $token = \local_o365\utils::get_app_or_system_token($tokenresource, $clientdata, $httpclient);
             $aadapiclient = new \local_o365\rest\azuread($token, $httpclient);
-            $aaduserdata = $aadapiclient->get_user($authoidcuserdata->oidcuniqid);
+            $aaduserdata = $aadapiclient->get_user($o365user->objectid);
             $userobjectdata = (object)[
                 'type' => 'user',
                 'subtype' => '',
@@ -488,18 +500,12 @@ class azuread extends \local_o365\rest\o365api {
             return null;
         }
 
-        $sql = 'SELECT u.*,
-                       tok.oidcuniqid as userobjectid
-                  FROM {auth_oidc_token} tok
-                  JOIN {user} u ON u.username = tok.username
-                 WHERE tok.resource = ? AND u.id = ? AND u.deleted = "0"';
-        $params = ['https://graph.windows.net', $userid];
-        $userobject = $DB->get_record_sql($sql, $params);
-        if (empty($userobject)) {
+        $o365user = \local_o365\obj\o365user::instance_from_muserid($userid);
+        if (empty($o365user)) {
             return null;
         }
 
-        $response = $this->add_member_to_group($coursegroupobject->objectid, $userobject->userobjectid);
+        $response = $this->add_member_to_group($coursegroupobject->objectid, $o365user->objectid);
         return $response;
     }
 
@@ -519,18 +525,12 @@ class azuread extends \local_o365\rest\o365api {
             return null;
         }
 
-        $sql = 'SELECT u.*,
-                       tok.oidcuniqid as userobjectid
-                  FROM {auth_oidc_token} tok
-                  JOIN {user} u ON u.username = tok.username
-                 WHERE tok.resource = ? AND u.id = ? AND u.deleted = "0"';
-        $params = ['https://graph.windows.net', $userid];
-        $userobject = $DB->get_record_sql($sql, $params);
-        if (empty($userobject)) {
+        $o365user = \local_o365\obj\o365user::instance_from_muserid($userid);
+        if (empty($o365user)) {
             return null;
         }
 
-        $response = $this->remove_member_from_group($coursegroupobject->objectid, $userobject->userobjectid);
+        $response = $this->remove_member_from_group($coursegroupobject->objectid, $o365user->objectid);
         return $response;
     }
 

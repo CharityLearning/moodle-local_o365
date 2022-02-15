@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Admin control panel page.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -27,7 +29,6 @@ require_login();
 require_capability('moodle/site:config', \context_system::instance());
 
 $mode = optional_param('mode', null, PARAM_TEXT);
-$acptitle = get_string('acp_title', 'local_o365');
 $url = new \moodle_url('/local/o365/acp.php', ['mode' => $mode]);
-$page = new \local_o365\page\acp($url, $acptitle);
+$page = new \local_o365\page\acp($url, get_string('settings_header_syncsettings', 'local_o365'));
 $page->run($mode);

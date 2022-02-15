@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Sharepoint test cases.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -22,8 +24,6 @@
  */
 
 defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
 
 /**
  * Tests \local_o365\rest\sharepoint.
@@ -36,7 +36,7 @@ class local_o365_sharepoint_testcase extends \advanced_testcase {
     /**
      * Perform setup before every test. This tells Moodle's phpunit to reset the database after every test.
      */
-    protected function setUp() {
+    protected function setUp() : void {
         parent::setUp();
         $this->resetAfterTest(true);
     }
@@ -62,13 +62,13 @@ class local_o365_sharepoint_testcase extends \advanced_testcase {
             'refreshtoken' => 'refreshtoken',
             'scope' => 'scope',
             'user_id' => '2',
-            'resource' => 'resource',
+            'tokenresource' => 'resource',
         ];
 
         $clientdata = new \local_o365\oauth2\clientdata($oidcconfig->clientid, $oidcconfig->clientsecret,
                 $oidcconfig->authendpoint, $oidcconfig->tokenendpoint);
         $token = new \local_o365\oauth2\token($tokenrec->token, $tokenrec->expiry, $tokenrec->refreshtoken,
-                $tokenrec->scope, $tokenrec->resource, $tokenrec->user_id, $clientdata, $httpclient);
+                $tokenrec->scope, $tokenrec->tokenresource, $tokenrec->user_id, $clientdata, $httpclient);
         return $token;
     }
 
@@ -89,6 +89,9 @@ class local_o365_sharepoint_testcase extends \advanced_testcase {
     /**
      * Get a successful response for creating a site.
      *
+     * @param string $title
+     * @param string $url
+     * @param string $description
      * @return string The json response.
      */
     protected function get_response_create_site($title, $url, $description) {
@@ -127,6 +130,7 @@ class local_o365_sharepoint_testcase extends \advanced_testcase {
     /**
      * Get a successful response for adding a user to a group.
      *
+     * @param string $userupn
      * @return string The json response.
      */
     protected function get_response_add_user_to_group($userupn) {
@@ -151,6 +155,8 @@ class local_o365_sharepoint_testcase extends \advanced_testcase {
     /**
      * Get a successful response for creating a group.
      *
+     * @param string $name
+     * @param string $desc
      * @return string The json response.
      */
     protected function get_response_create_group($name, $desc) {
@@ -225,6 +231,20 @@ class local_o365_sharepoint_testcase extends \advanced_testcase {
             'expiry' => 0
         ];
         $testtoken->id = $DB->insert_record('local_o365_token', $testtoken);
+
+        $testoidctoken = (object)[
+            'oidcuniqid' => 'user1',
+            'tokenresource' => 'https://graph.microsoft.com',
+            'username' => $user1->username,
+            'userid' => $user1->id,
+            'scope' => 'User.Read',
+            'authcode' => '000',
+            'token' => '111',
+            'refreshtoken' => '222',
+            'idtoken' => '333',
+            'expiry' => time() + 9999,
+        ];
+        $testoidctoken->id = $DB->insert_record('auth_oidc_token', $testoidctoken);
 
         $aaduserdata = (object)[
             'type' => 'user',

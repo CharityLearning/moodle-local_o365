@@ -15,14 +15,18 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Observers definition.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @copyright (C) 2014 onwards Microsoft, Inc. (http://microsoft.com/)
  */
 
+defined('MOODLE_INTERNAL') || die();
+
 $observers = [
-    // User groups
+    // User groups.
     [
         'eventname'   => '\core\event\group_created',
         'callback'    => '\local_o365\feature\usergroups\observers::handle_group_created',
@@ -121,7 +125,7 @@ $observers = [
         'eventname'   => '\auth_oidc\event\user_disconnected',
         'callback'    => '\local_o365\observers::handle_oidc_user_disconnected',
         'priority'    => 200,
-        'internal'    => false,
+        'internal'    => true,
     ],
     [
         'eventname'   => '\auth_oidc\event\user_loggedin',
@@ -140,6 +144,12 @@ $observers = [
     [
         'eventname'   => '\core\event\user_enrolment_deleted',
         'callback'    => '\local_o365\observers::handle_user_enrolment_deleted',
+        'priority'    => 200,
+        'internal'    => false,
+    ],
+    [
+        'eventname'   => '\core\event\user_enrolment_updated',
+        'callback'    => '\local_o365\observers::handle_user_enrolment_updated',
         'priority'    => 200,
         'internal'    => false,
     ],
@@ -174,6 +184,12 @@ $observers = [
         'internal'    => false,
     ],
     [
+        'eventname'   => '\core\event\course_restored',
+        'callback'    => '\local_o365\observers::handle_course_restored',
+        'priority'    => 200,
+        'internal'    => false,
+    ],
+    [
         'eventname'   => '\core\event\course_updated',
         'callback'    => '\local_o365\observers::handle_course_updated',
         'priority'    => 200,
@@ -195,6 +211,24 @@ $observers = [
         'eventname'   => '\core\event\user_deleted',
         'callback'    => '\local_o365\observers::handle_user_deleted',
         'priority'    => 200,
+        'internal'    => true,
+    ],
+    [
+        'eventname'   => '\core\event\notification_sent',
+        'callback'    => '\local_o365\observers::handle_notification_sent',
+        'priority'    => 200,
         'internal'    => false,
+    ],
+    [
+        'eventname'   => '\core\event\config_log_created',
+        'callback'    => '\local_o365\observers::handle_config_log_created',
+        'priority'    => 200,
+        'internal'    => true,
+    ],
+    [
+        'eventname'   => '\core\event\course_reset_started',
+        'callback'    => '\local_o365\feature\usergroups\observers::handle_course_reset_started',
+        'priority'    => 200,
+        'internal'    => true,
     ],
 ];

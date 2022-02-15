@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Abstract base class for all o365 REST api classes.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -23,11 +25,15 @@
 
 namespace local_o365\rest;
 
+defined('MOODLE_INTERNAL') || die();
+
 /**
  * Abstract base class for all o365 REST api classes.
  */
 abstract class o365api {
-    /** The general API area of the class. */
+    /**
+     * @var null The general API area of the class.
+     */
     public $apiarea = null;
 
     /** @var \local_o365\oauth2\token A token object representing all token information to be used for this client. */
@@ -77,11 +83,11 @@ abstract class o365api {
     public static function instance_for_user($userid = null) {
         $httpclient = new \local_o365\httpclient();
         $clientdata = \local_o365\oauth2\clientdata::instance_from_oidc();
-        $resource = static::get_resource();
+        $tokenresource = static::get_tokenresource();
         if (!empty($userid)) {
-            $token = \local_o365\oauth2\token::instance($userid, $resource, $clientdata, $httpclient);
+            $token = \local_o365\oauth2\token::instance($userid, $tokenresource, $clientdata, $httpclient);
         } else {
-            $token = \local_o365\utils::get_app_or_system_token($resource, $clientdata, $httpclient);
+            $token = \local_o365\utils::get_app_or_system_token($tokenresource, $clientdata, $httpclient);
         }
         if (!empty($token)) {
             return new static($token, $httpclient);
@@ -95,7 +101,7 @@ abstract class o365api {
      *
      * @return string The resource for oauth2 tokens.
      */
-    public static function get_resource() {
+    public static function get_tokenresource() {
         throw new \moodle_exception('erroro365apinotimplemented', 'local_o365');
     }
 
@@ -201,8 +207,8 @@ abstract class o365api {
             $header[] = 'Content-length: '.strlen($params);
         }
 
-        $this->httpclient->resetHeader();
-        $this->httpclient->setHeader($header);
+        $this->httpclient->resetheader();
+        $this->httpclient->setheader($header);
 
         // Check if we were rate limited in the last 10 minutes.
         $ratelimitlevel = 0;
@@ -235,8 +241,12 @@ abstract class o365api {
         if ($this->httpclient->info['http_code'] == 429) {
             // We are being throttled.
             $ratelimitlevel++;
-            set_config('ratelimit', $ratelimitlevel.':'.time(), 'local_o365');
+            set_config('ratelimit', $ratelimitlevel . ':' . time(), 'local_o365');
+
             return $this->apicall($origparam['httpmethod'], $origparam['apimethod'], $origparam['params'], $origparam['options']);
+        } else if ($this->httpclient->info['http_code'] == 202) {
+            // If response is 202 Accepted, return response.
+            return $this->httpclient->response;
         } else {
             return $result;
         }
@@ -305,10 +315,11 @@ abstract class o365api {
         return $result;
     }
 
-    /*
+    /**
      * Get a full URL and include auth token. This is useful for associated resources: attached images, etc.
      *
      * @param string $url A full URL to get.
+     * @param array $options
      * @return string The result of the request.
      */
     public function geturl($url, $options = array()) {
@@ -319,8 +330,8 @@ abstract class o365api {
         $header = [
             'Authorization: Bearer '.$this->token->get_token(),
         ];
-        $this->httpclient->resetHeader();
-        $this->httpclient->setHeader($header);
+        $this->httpclient->resetheader();
+        $this->httpclient->setheader($header);
         return $this->httpclient->get($url, '', $options);
     }
 
@@ -336,24 +347,45 @@ abstract class o365api {
                 'appId' => '00000003-0000-0000-c000-000000000000',
                 'displayName' => '',
                 'requiredAppPermissions' => [
-                    'Files.ReadWrite.All' => [],
-                    'User.ReadWrite.All' => [],
+                    'Directory.ReadWrite.All' => [],
                     'Directory.Read.All' => [],
                     'Group.ReadWrite.All' => [],
+                    'User.Read.All' => ['User.ReadWrite.All'],
+                    'Files.ReadWrite.All' => [],
                     'Calendars.ReadWrite' => [],
-                    'Notes.ReadWrite.All' => [],
-                    'Domain.ReadWrite.All' => [],
-                 ],
-                'requiredDelegatedPermissions' => [
-                    'openid' => [],
-                    'Calendars.ReadWrite' => [],
-                    'Directory.AccessAsUser.All' => [],
-                    'Directory.ReadWrite.All' => [],
-                    'Files.ReadWrite' => [],
-                    'Notes.ReadWrite.All' => [],
-                    'User.ReadWrite.All' => [],
-                    'Group.ReadWrite.All' => [],
                     'Sites.Read.All' => [],
+                    'Notes.ReadWrite.All' => [],
+                    'AppRoleAssignment.ReadWrite.All' => [],
+                    'MailboxSettings.Read' => ['MailboxSettings.ReadWrite'],
+                    'EduRoster.Read.All' => ['EduRoster.ReadWrite.All'],
+                    'Member.Read.Hidden' => [],
+                 ],
+                'requiredDelegatedPermissionsUsingAppPermissions' => [
+                    'Files.ReadWrite.All' => [],
+                    'Notes.ReadWrite.All' => [],
+                    'User.Read' => [],
+                    'openid' => [],
+                    'offline_access' => [],
+                    'email' => [],
+                    'profile' => [],
+                ],
+                'requiredDelegatedPermissions' => [
+                    'Directory.ReadWrite.All' => [],
+                    'Directory.Read.All' => [],
+                    'Group.ReadWrite.All' => [],
+                    'User.Read.All' => [],
+                    'Files.ReadWrite.All' => [],
+                    'Calendars.ReadWrite' => [],
+                    'Sites.Read.All' => [],
+                    'Notes.ReadWrite.All' => [],
+                    'AppRoleAssignment.ReadWrite.All' => [],
+                    'MailboxSettings.Read' => ['MailboxSettings.ReadWrite'],
+                    'EduRoster.ReadBasic' => [],
+                    'User.Read' => ['User.ReadWrite.All'],
+                    'openid' => [],
+                    'offline_access' => [],
+                    'email' => [],
+                    'profile' => [],
                 ],
             ],
             'azure' => [

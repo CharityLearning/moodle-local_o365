@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Scheduled task to process a batch from the match queue.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -22,6 +24,10 @@
  */
 
 namespace local_o365\task;
+
+defined('MOODLE_INTERNAL') || die();
+
+global $CFG;
 
 require_once($CFG->dirroot.'/auth/oidc/auth.php');
 
@@ -46,14 +52,14 @@ class processmatchqueue extends \core\task\scheduled_task {
     public function get_api() {
         $unifiedconfigured = \local_o365\rest\unified::is_configured();
         if ($unifiedconfigured === true) {
-            $resource = \local_o365\rest\unified::get_resource();
+            $tokenresource = \local_o365\rest\unified::get_tokenresource();
         } else {
-            $resource = \local_o365\rest\azuread::get_resource();
+            $tokenresource = \local_o365\rest\azuread::get_tokenresource();
         }
 
         $clientdata = \local_o365\oauth2\clientdata::instance_from_oidc();
         $httpclient = new \local_o365\httpclient();
-        $token = \local_o365\utils::get_app_or_system_token($resource, $clientdata, $httpclient);
+        $token = \local_o365\utils::get_app_or_system_token($tokenresource, $clientdata, $httpclient);
         if (empty($token)) {
             throw new \Exception('No token available for system user. Please run local_o365 health check.');
         }
@@ -131,7 +137,7 @@ class processmatchqueue extends \core\task\scheduled_task {
                     continue;
                 }
 
-                // Check existing matches for Office user.
+                // Check existing matches for Microsoft 365 user.
                 if (!empty($matchrec->officeuserexistingconnectionid)) {
                     $updatedrec = new \stdClass;
                     $updatedrec->id = $matchrec->id;
@@ -142,7 +148,7 @@ class processmatchqueue extends \core\task\scheduled_task {
                     continue;
                 }
 
-                // Check existing tokens for Office 365 user (indicates o365 user is already connected to someone).
+                // Check existing tokens for Microsoft 365 user (indicates o365 user is already connected to someone).
                 if (!empty($matchrec->officeuserexistingoidctoken)) {
                     $updatedrec = new \stdClass;
                     $updatedrec->id = $matchrec->id;
@@ -223,7 +229,8 @@ class processmatchqueue extends \core\task\scheduled_task {
                 $updatedrec->id = $matchrec->id;
                 $updatedrec->completed = 1;
                 $DB->update_record('local_o365_matchqueue', $updatedrec);
-                mtrace('Match record created for userid #'.$matchrec->muserid.' and o365 user '.\core_text::strtolower($o365user['userPrincipalName']));
+                mtrace('Match record created for userid #' . $matchrec->muserid . ' and o365 user ' .
+                    \core_text::strtolower($o365user['userPrincipalName']));
 
             } catch (\Exception $e) {
                 $exceptionstring = $e->getMessage().': '.$e->debuginfo;

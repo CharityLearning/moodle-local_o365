@@ -15,11 +15,15 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Web service definition.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @copyright (C) 2014 onwards Microsoft Open Technologies, Inc. (http://msopentech.com/)
  */
+
+defined('MOODLE_INTERNAL') || die();
 
 $functions = [
     'local_o365_create_onenoteassignment' => [
@@ -78,11 +82,18 @@ $functions = [
         'description' => 'Update a grade.',
         'type' => 'write',
     ],
+    'local_o365_get_bot_message' => [
+        'classname' => '\local_o365\webservices\read_bot_message',
+        'methodname' => 'bot_message_read',
+        'classpath' => 'local/o365/classes/webservices/read_bot_message.php',
+        'description' => 'Get bot message.',
+        'type' => 'read',
+    ]
 ];
 
 // Pre-built service.
 $services = [
-    'Moodle Office 365 Webservices' => [
+    'Moodle Microsoft 365 Webservices' => [
         'functions' => [
             'local_o365_create_onenoteassignment',
             'local_o365_get_onenoteassignment',
@@ -91,6 +102,7 @@ $services = [
             'local_o365_get_teachercourses',
             'local_o365_get_course_users',
             'local_o365_get_assignments',
+            'local_o365_get_bot_message',
             'local_o365_update_grade',
             'mod_assign_get_assignments',
             'mod_assign_get_grades',

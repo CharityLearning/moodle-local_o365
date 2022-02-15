@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * API client for o365 outlook api.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -23,11 +25,15 @@
 
 namespace local_o365\rest;
 
+defined('MOODLE_INTERNAL') || die();
+
 /**
  * API client for o365 outlook api.
  */
 class outlook extends \local_o365\rest\o365api {
-    /** The general API area of the class. */
+    /**
+     * @var string The general API area of the class.
+     */
     public $apiarea = 'outlook';
 
     /**
@@ -35,7 +41,7 @@ class outlook extends \local_o365\rest\o365api {
      *
      * @return string The resource for oauth2 tokens.
      */
-    public static function get_resource() {
+    public static function get_tokenresource() {
         return (static::use_chinese_api() === true) ? 'https://partner.outlook.cn' : 'https://outlook.office365.com';
     }
 
@@ -45,12 +51,12 @@ class outlook extends \local_o365\rest\o365api {
      * @return string|bool The URI to send API calls to, or false if a precondition failed.
      */
     public function get_apiuri() {
-        return static::get_resource().'/api/v2.0';
+        return static::get_tokenresource().'/api/v2.0';
     }
 
     /**
      * Get a users photo.
-     * @param $user User to retrieve photo.
+     * @param string $user User to retrieve photo.
      * @return array|null Returned binary photo data, false if there is no photo.
      */
     public function get_photo($user = null) {
@@ -64,8 +70,8 @@ class outlook extends \local_o365\rest\o365api {
 
     /**
      * Get photo meta data.
-     * @param $user User to retrieve photo meta data for.
-     * @param $minsize Ignored for api version 1.
+     * @param string $user User to retrieve photo meta data for.
+     * @param string $minsize Ignored for api version 1.
      * @return array|null Returned response, or false if error.
      */
     public function get_photo_metadata($user = null, $minsize = 100) {

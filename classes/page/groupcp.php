@@ -15,12 +15,17 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * User control panel page.
+ *
  * @package local_o365
+ * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @copyright (C) 2014 onwards Microsoft, Inc. (http://microsoft.com/)
  */
 
 namespace local_o365\page;
+
+defined('MOODLE_INTERNAL') || die();
 
 /**
  * User control panel page.
@@ -70,7 +75,8 @@ class groupcp extends base {
         $group = $DB->get_record('local_o365_coursegroupdata', ['courseid' => $data->courseid, 'groupid' => $data->groupid]);
         if ($editform && $editoroptions && empty($data->groupid)) {
             // Update description from editor with fixed files.
-            $data = file_postupdate_standard_editor($data, 'description', $editoroptions, $context, 'local_o365', 'description', $data->id);
+            $data = file_postupdate_standard_editor($data, 'description', $editoroptions, $context, 'local_o365', 'description',
+                $data->id);
         }
 
         if (!empty($group)) {
@@ -117,7 +123,8 @@ class groupcp extends base {
 
         $manage = has_capability('local/o365:managegroups', $context);
         if ($manage) {
-            $groups = \local_o365\feature\usergroups\utils::study_groups_list($USER->id, ['courseid' => $course->id], $manage, 0, 1000, 2);
+            $groups = \local_o365\feature\usergroups\utils::study_groups_list($USER->id, ['courseid' => $course->id], $manage, 0,
+                1000, 2);
         } else {
             $groups = \local_o365\feature\usergroups\utils::study_groups_list($USER->id, null, $manage, 0, 1000, 2);
         }
@@ -127,8 +134,6 @@ class groupcp extends base {
 
         echo $this->standard_header();
 
-        $cache = \cache::make('local_o365', 'groups');
-
         $start = $page * 25;
         $end = $start + 25;
         $count = 0;
@@ -136,10 +141,10 @@ class groupcp extends base {
         $row = \html_writer::tag('td', '');
         $row .= \html_writer::tag('td', \html_writer::tag('strong', get_string('groups_columnname', 'local_o365')));
         $columncount = 0;
-        // Unable to test this code.
-        foreach (['conversations', 'onedrive', 'calendar', 'notebook'] as $feature) {
+
+        foreach (['team'] as $feature) {
             $attr = ['class' => 'local_o365_groupcp_managegroups_header'];
-            $strresourcename = get_string('groups_'.$feature, 'local_o365');
+            $strresourcename = get_string('groups_' . $feature, 'local_o365');
             $row .= \html_writer::tag('td', \html_writer::tag('strong', $strresourcename), $attr);
             $columncount++;
         }
@@ -148,7 +153,7 @@ class groupcp extends base {
 
         foreach ($groups as $group) {
             if ($count >= $start && $count < $end) {
-                $groupscache = \local_o365\feature\usergroups\utils::get_group_urls($cache, $group->courseid, $group->id);
+                $groupurls = \local_o365\feature\usergroups\utils::get_group_urls($group->courseid, $group->id);
                 $attr = [
                     'courseid' => $group->courseid,
                     'groupid'  => $group->id,
@@ -172,17 +177,17 @@ class groupcp extends base {
                 $link = \html_writer::link($url, $group->name);
                 $row .= \html_writer::tag('td', $link);
 
-                if ($groupscache == null) {
+                if ($groupurls == null) {
                     $row .= \html_writer::tag('td', $strpending, ['colspan' => $columncount]);
                 } else {
-                    // Unable to test this code.
-                    foreach (['conversations', 'onedrive', 'calendar', 'notebook'] as $feature) {
-                        $enabled = \local_o365\feature\usergroups\utils::course_is_group_feature_enabled($group->courseid, $feature);
+                    foreach (['team'] as $feature) {
+                        $enabled = \local_o365\feature\usergroups\utils::course_is_group_feature_enabled($group->courseid,
+                            $feature);
                         if ($enabled === true) {
-                            $url = new \moodle_url($groupscache['urls'][$feature]);
-                            $strresourcename = get_string('groups_'.$feature, 'local_o365');
+                            $url = new \moodle_url($groupurls[$feature]);
+                            $strresourcename = get_string('groups_' . $feature, 'local_o365');
                             $pixattrs = ['style' => 'width:2rem;height:2rem'];
-                            $icon = $OUTPUT->pix_icon('groups'.$feature, $strresourcename, 'local_o365', $pixattrs);
+                            $icon = $OUTPUT->pix_icon('groups' . $feature, $strresourcename, 'local_o365', $pixattrs);
                             $tdattrs = ['style' => 'text-align:center'];
                             $row .= \html_writer::tag('td', \html_writer::link($url, $icon, ['target' => '_blank']), $tdattrs);
                         } else {
@@ -314,10 +319,12 @@ class groupcp extends base {
 
         if (!empty($editorid)) {
             $editoroptions['subdirs'] = file_area_contains_subdirs($context, $component, 'description', $editorid);
-            $group = file_prepare_standard_editor($group, 'description', $editoroptions, $context, $component, 'description', $editorid);
+            $group = file_prepare_standard_editor($group, 'description', $editoroptions, $context, $component, 'description',
+                $editorid);
         } else {
             $editoroptions['subdirs'] = false;
-            $group = file_prepare_standard_editor($group, 'description', $editoroptions, $context, $component, 'description', null);
+            $group = file_prepare_standard_editor($group, 'description', $editoroptions, $context, $component, 'description',
+                null);
         }
 
         // First create the form.
@@ -334,7 +341,8 @@ class groupcp extends base {
             } else {
                 $id = \local_o365\feature\usergroups\utils::create_group($data, $editform, $editoroptions);
                 $group = $DB->get_record('local_o365_coursegroupdata', ['id' => $id]);
-                $returnurl = new \moodle_url('/local/o365/groupcp.php', ['courseid' => $group->courseid, 'groupid' => $group->groupid]);
+                $returnurl = new \moodle_url('/local/o365/groupcp.php',
+                    ['courseid' => $group->courseid, 'groupid' => $group->groupid]);
             }
             redirect($returnurl);
         }
@@ -389,7 +397,7 @@ class groupcp extends base {
             $group = $DB->get_record('local_o365_coursegroupdata', ['courseid' => $courseid, 'groupid' => $groupid]);
         }
 
-        $this->set_title($course->fullname.': '.get_string('groups', 'local_o365'));
+        $this->set_title($course->fullname . ': ' . get_string('groups', 'local_o365'));
         $PAGE->set_pagelayout('course');
         $this->set_url(new \moodle_url($this->url, ['courseid' => $group->courseid, 'groupid' => $group->groupid]));
         $this->set_context(\context_course::instance($course->id));
@@ -399,8 +407,7 @@ class groupcp extends base {
             require_capability('local/o365:viewgroups', $this->context);
         }
 
-        $cache = \cache::make('local_o365', 'groups');
-        $groupscache = \local_o365\feature\usergroups\utils::get_group_urls($cache, $courseid, $groupid);
+        $groupurls = \local_o365\feature\usergroups\utils::get_group_urls($courseid, $groupid);
 
         echo $OUTPUT->header();
 
@@ -413,7 +420,7 @@ class groupcp extends base {
         $headerhtml = $grouppicture.\html_writer::tag('h4', $group->displayname);
         echo \html_writer::div($headerhtml, 'local_o365_groupcp_header');
 
-        if ($groupscache == null) {
+        if ($groupurls == null) {
             // Group is not created yet.
             $html = \html_writer::tag('h5', get_string('groups_pending', 'local_o365'));
             echo \html_writer::tag('div', $html);
@@ -421,15 +428,12 @@ class groupcp extends base {
             $links = [
                 \html_writer::tag('h5', 'Group Resources:'),
             ];
-            foreach (['conversations', 'onedrive', 'calendar', 'notebook'] as $feature) {
-                if (!isset($groupscache['urls'][$feature])) {
-                    continue;
-                }
-                if (\local_o365\feature\usergroups\utils::course_is_group_feature_enabled($course->id, $feature) !== true) {
+            foreach (['conversations', 'onedrive', 'calendar', 'notebook', 'team'] as $feature) {
+                if (!isset($groupurls[$feature])) {
                     continue;
                 }
 
-                $url = new \moodle_url($groupscache['urls'][$feature]);
+                $url = new \moodle_url($groupurls[$feature]);
                 $strresourcename = get_string('groups_'.$feature, 'local_o365');
                 $icon = $OUTPUT->pix_icon('groups'.$feature, $strresourcename, 'local_o365');
                 $links[] = \html_writer::link($url, $icon.$strresourcename, ['target' => '_blank']);
@@ -438,7 +442,8 @@ class groupcp extends base {
         }
 
         if (has_capability('local/o365:managegroups', $this->context)) {
-            $url = new \moodle_url('/local/o365/groupcp.php', ['action' => 'editgroup', 'id' => $group->id, 'courseid' => $courseid]);
+            $url = new \moodle_url('/local/o365/groupcp.php',
+                ['action' => 'editgroup', 'id' => $group->id, 'courseid' => $courseid]);
             $streditgroup = get_string('groups_editsettings', 'local_o365');
             $html = \html_writer::tag('h5', \html_writer::link($url, $streditgroup));
             echo \html_writer::tag('div', $html);

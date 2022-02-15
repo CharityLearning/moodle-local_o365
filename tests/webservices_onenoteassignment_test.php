@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Test cases for onenote assignment features.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -22,8 +24,6 @@
  */
 
 defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
 
 require_once($CFG->dirroot.'/lib/externallib.php');
 
@@ -35,7 +35,7 @@ require_once($CFG->dirroot.'/lib/externallib.php');
  */
 class local_o365_webservices_onenoteassignment_testcase extends \advanced_testcase {
 
-    // Data structure elements of the array based on old Data Provider
+    // Data structure elements of the array based on old Data Provider.
     const DBSTATE = 0;
     const PARAMS = 1;
     const EXPECTEDRETURN = 2;
@@ -44,7 +44,7 @@ class local_o365_webservices_onenoteassignment_testcase extends \advanced_testca
     /**
      * Perform setup before every test. This tells Moodle's phpunit to reset the database after every test.
      */
-    protected function setUp() {
+    protected function setUp() : void {
         parent::setUp();
         $this->resetAfterTest(true);
     }
@@ -158,17 +158,27 @@ class local_o365_webservices_onenoteassignment_testcase extends \advanced_testca
                                                            'name' => 'OneNote Assignment',
                                                            'intro' => 'This is a test assignment'));
 
-        // Enable OneNote submission for this assignment
-        $assignpluginconfig = $DB->get_record('assign_plugin_config', array('assignment' => $assign->id,
-                                                                            'plugin' => 'onenote',
-                                                                            'subtype' => 'assignsubmission'));
-        $assignpluginconfig->value = 1;
-        $DB->update_record('assign_plugin_config', $assignpluginconfig);
+        // Enable OneNote submission for this assignment.
+        $pluginconfigparams = [
+            'assignment' => $assign->id,
+            'plugin' => 'onenote',
+            'subtype' => 'assignsubmission',
+            'name' => 'enabled',
+        ];
+        $assignpluginconfig = $DB->get_record('assign_plugin_config', $pluginconfigparams);
+        if (empty($assignpluginconfig)) {
+            $pluginconfigparams['value'] = 1;
+            $DB->insert_record('assign_plugin_config', $pluginconfigparams);
+        } else if (empty($pluginconfigparams['value'])) {
+            $assignpluginconfig->value = 1;
+            $DB->update_record('assign_plugin_config', $assignpluginconfig);
+        }
 
-        // get assignment config
-        $module = $DB->get_field('modules', 'id', array('name' => 'assign'));
+        // Get assignment config.
         $fakecourseid = $course->id + 1;
         $fakecmid = $assign->cmid + 1;
+
+        $invalidrecord = new lang_string('invalidrecord', 'error', 'course');
 
         return [
             'Course not found (no course)' => [
@@ -177,7 +187,7 @@ class local_o365_webservices_onenoteassignment_testcase extends \advanced_testca
                     'coursemodule' => $assign->cmid,
                     'course' => -1,
                 ],
-                'expectedexception' => ['dml_missing_record_exception', 'Can not find data record in database table course'],
+                'expectedexception' => ['dml_missing_record_exception', $invalidrecord->out()],
             ],
             'Course not found (different id)' => [
                 'dbstate' => [],
@@ -185,7 +195,7 @@ class local_o365_webservices_onenoteassignment_testcase extends \advanced_testca
                     'coursemodule' => $assign->cmid,
                     'course' => $fakecourseid,
                 ],
-                'expectedexception' => ['dml_missing_record_exception', 'Can not find data record in database table course'],
+                'expectedexception' => ['dml_missing_record_exception', $invalidrecord->out()],
             ],
             'Module not found (no record)' => [
                 'dbstate' => [],
@@ -511,7 +521,7 @@ class local_o365_webservices_onenoteassignment_testcase extends \advanced_testca
         $return = [];
 
         foreach ($generaltests as $testkey => $parameters) {
-            // Test only deleting the OneNote assigmment
+            // Test only deleting the OneNote assignment.
             if ($testkey === 'All data correct, assignment is a OneNote assignment') {
                 $return[$testkey] = [
                     $parameters['dbstate'],

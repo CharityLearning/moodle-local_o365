@@ -1,11 +1,10 @@
-# Office 365 and Azure Active Directory plugins for Moodle 
-*includes support for Office 365 Education, Office 365 Enterprise, Azure Active Directory and Microsoft School Data Sync
+# Microsoft 365 and Azure Active Directory Plugins for Moodle
 
 ## o365 Local Plugin
 
-This plugin provides libraries and services and power other Office 365 plugins. In addition to providing implementations of Office 365 apis, this plugin handles a wide variety of Moodle events to fully integrate Office 365 into a Moodle installation.
+This plugin provides libraries and services and power other Microsoft 365 plugins. In addition to providing implementations of Microsoft 365 apis, this plugin handles a wide variety of Moodle events to fully integrate Microsoft 365 into a Moodle installation.
 
-This is part of the suite of Office 365 plugins for Moodle.
+This is part of the suite of Microsoft 365 plugins for Moodle.
 
 This repository is updated with stable releases. To follow active development, see: https://github.com/Microsoft/o365-moodle
 
@@ -21,7 +20,7 @@ For more information including support and instructions on how to contribute, pl
 
 ## Issues and Contributing
 Please post issues for this plugin to: https://github.com/Microsoft/o365-moodle/issues/
-Pull requests for this plugin should be submitted against our main repository: https://github.com/Microsoft/o365-moodle 
+Pull requests for this plugin should be submitted against our main repository: https://github.com/Microsoft/o365-moodle
 
 ## Copyright
 

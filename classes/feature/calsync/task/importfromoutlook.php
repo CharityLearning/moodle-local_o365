@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Scheduled task to check for new o365 events and sync them into Moodle.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -22,6 +24,8 @@
  */
 
 namespace local_o365\feature\calsync\task;
+
+defined('MOODLE_INTERNAL') || die();
 
 /**
  * Scheduled task to check for new o365 events and sync them into Moodle.
@@ -64,10 +68,12 @@ class importfromoutlook extends \core\task\scheduled_task {
         foreach ($calsubs as $i => $calsub) {
             try {
                 mtrace('Syncing events for user #'.$calsub->user_id);
-                $events = $calsync->get_events($calsub->user_id, $calsub->o365calid, $laststarttime);
-                if (!empty($events) && is_array($events) && isset($events['value']) && is_array($events['value'])) {
-                    if (!empty($events['value'])) {
-                        foreach ($events['value'] as $i => $event) {
+
+                $o365upn = \local_o365\utils::get_o365_upn($calsub->user_id);
+                $events = $calsync->get_events($calsub->user_id, $calsub->o365calid, $laststarttime, $o365upn);
+                if (!empty($events) && is_array($events) && isset($events['value']) && is_array($events)) {
+                    if (!empty($events)) {
+                        foreach ($events as $i => $event) {
                             if (!isset($event['Id'])) {
                                 $errmsg = 'Skipped an event because of malformed data.';
                                 \local_o365\utils::debug($errmsg, 'importfromoutlook', $event);

@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Observer functions used in the group / team sync feature.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -23,6 +25,15 @@
 
 namespace local_o365\feature\usergroups;
 
+defined('MOODLE_INTERNAL') || die();
+
+global $CFG;
+
+require_once($CFG->dirroot . '/local/o365/lib.php');
+
+/**
+ * A class defining the observer functions used in the group / team sync feature.
+ */
 class observers {
     /**
      * Get a Microsoft Graph API instance.
@@ -33,8 +44,8 @@ class observers {
     public static function get_unified_api($caller = 'get_unified_api') {
         $clientdata = \local_o365\oauth2\clientdata::instance_from_oidc();
         $httpclient = new \local_o365\httpclient();
-        $resource = \local_o365\rest\unified::get_resource();
-        $token = \local_o365\utils::get_app_or_system_token($resource, $clientdata, $httpclient);
+        $tokenresource = \local_o365\rest\unified::get_tokenresource();
+        $token = \local_o365\utils::get_app_or_system_token($tokenresource, $clientdata, $httpclient);
         if (!empty($token)) {
             return new \local_o365\rest\unified($token, $httpclient);
         } else {
@@ -87,8 +98,6 @@ class observers {
      * @return bool Success/Failure.
      */
     public static function handle_group_created(\core\event\group_created $event) {
-        global $DB;
-
         if (\local_o365\utils::is_configured() !== true || \local_o365\feature\usergroups\utils::is_enabled() !== true) {
             return false;
         }
@@ -106,7 +115,7 @@ class observers {
             return false;
         }
 
-        $coursegroups = new \local_o365\feature\usergroups\coursegroups($apiclient, $DB, false);
+        $coursegroups = new \local_o365\feature\usergroups\coursegroups($apiclient, false);
         try {
             $object = $coursegroups->create_study_group($usergroupid);
             if (empty($object->objectid)) {
@@ -127,7 +136,6 @@ class observers {
      * @return bool Success/Failure.
      */
     public static function handle_group_updated(\core\event\group_updated $event) {
-        global $DB;
         if (\local_o365\utils::is_configured() !== true || \local_o365\feature\usergroups\utils::is_enabled() !== true) {
             return false;
         }
@@ -137,7 +145,7 @@ class observers {
         }
 
         $usergroupid = $event->objectid;
-        $coursegroups = new \local_o365\feature\usergroups\coursegroups($apiclient, $DB, false);
+        $coursegroups = new \local_o365\feature\usergroups\coursegroups($apiclient, false);
         $coursegroups->update_study_group($usergroupid);
     }
 
@@ -302,6 +310,152 @@ class observers {
             \local_o365\utils::debug($msg, $caller, $result);
             return false;
         }
+        return true;
+    }
+
+    /**
+     * Observer function that listens for course_reset_started event.
+     * Perform Team/group reset actions if configured.
+     *
+     * @param \core\event\course_reset_started $event
+     *
+     * @return bool
+     */
+    public static function handle_course_reset_started(\core\event\course_reset_started $event) {
+        global $CFG, $DB;
+
+        if (!\local_o365\utils::is_configured()) {
+            return false;
+        }
+
+        if (!\local_o365\feature\usergroups\utils::is_enabled()) {
+            return false;
+        }
+
+        $eventdata = $event->get_data();
+        $courseid = $eventdata['courseid'];
+
+        if (!$course = $DB->get_record('course', ['id' => $courseid])) {
+            return false;
+        }
+
+        if (!\local_o365\feature\usergroups\utils::course_is_group_enabled($courseid)) {
+            return false;
+        }
+
+        $connectedtoteam = false;
+        if (\local_o365\feature\usergroups\utils::course_is_group_feature_enabled($courseid, 'team')) {
+            // The course is configured to be connected to Team.
+            if (!$o365object = $DB->get_record('local_o365_objects',
+                ['type' => 'group', 'subtype' => 'courseteam', 'moodleid' => $courseid])) {
+                // The team cannot be found.
+                return false;
+            }
+            $connectedtoteam = true;
+        } else {
+            // The course is configured to be connected to group.
+            if (!$o365object = $DB->get_record('local_o365_objects',
+                ['type' => 'group', 'subtype' => 'course', 'moodleid' => $courseid])) {
+                return false;
+            }
+        }
+
+        // Get coursegroups API.
+        $apiclient = static::get_unified_api('handle_course_reset_started');
+        if (empty($apiclient)) {
+            return false;
+        }
+        $coursegroups = new \local_o365\feature\usergroups\coursegroups($apiclient, false);
+
+        // All validation passed. Start processing.
+        $siteresetsetting = get_config('local_o365', 'course_reset_teams');
+
+        $createteams = get_config('local_o365', 'createteams');
+
+        switch ($createteams) {
+            case 'off':
+                $siteresetsetting = TEAMS_GROUP_COURSE_RESET_SITE_SETTING_DISCONNECT_ONLY;
+                break;
+            case 'onall':
+                if ($siteresetsetting == TEAMS_GROUP_COURSE_RESET_SITE_SETTING_DISCONNECT_ONLY) {
+                    $siteresetsetting = TEAMS_GROUP_COURSE_RESET_SITE_SETTING_DISCONNECT_AND_CREATE_NEW;
+                }
+                break;
+        }
+
+        switch ($siteresetsetting) {
+            case TEAMS_GROUP_COURSE_RESET_SITE_SETTING_PER_COURSE:
+                // Check course settings.
+                if ($DB->record_exists('config_plugins', ['plugin' => 'block_microsoft', 'name' => 'version'])) {
+                    // Plugin found.
+                    if (file_exists($CFG->dirroot . '/blocks/microsoft/lib.php')) {
+                        require_once($CFG->dirroot . '/blocks/microsoft/lib.php');
+                        $courseresetsetting = block_microsoft_get_course_reset_setting($courseid);
+
+                        if ($connectedtoteam) {
+                            switch ($createteams) {
+                                case 'off':
+                                    $courseresetsetting = TEAMS_COURSE_RESET_SETTING_DISCONNECT_ONLY;
+                                    break;
+                                case 'onall':
+                                    if ($courseresetsetting == TEAMS_COURSE_RESET_SETTING_DISCONNECT_ONLY) {
+                                        $courseresetsetting = TEAMS_COURSE_RESET_SETTING_DISCONNECT_AND_CREATE_NEW;
+                                    }
+                                    break;
+                            }
+                            switch ($courseresetsetting) {
+                                case TEAMS_COURSE_RESET_SETTING_DISCONNECT_AND_CREATE_NEW:
+                                    $coursegroups->process_course_reset_team($course, $o365object, true);
+                                    break;
+                                case TEAMS_COURSE_RESET_SETTING_DISCONNECT_ONLY:
+                                    $coursegroups->process_course_reset_team($course, $o365object, false);
+                                    utils::set_course_group_enabled($courseid, false, true);
+                                    break;
+                            }
+                        } else {
+                            switch ($createteams) {
+                                case 'off':
+                                    $courseresetsetting = GROUP_COURSE_RESET_SETTING_DISCONNECT_ONLY;
+                                    break;
+                                case 'onall':
+                                    if ($courseresetsetting == GROUP_COURSE_RESET_SETTING_DISCONNECT_AND_CREATE_NEW) {
+                                        $courseresetsetting = GROUP_COURSE_RESET_SETTING_DISCONNECT_AND_CREATE_NEW;
+                                    }
+                                    break;
+                            }
+                            switch ($courseresetsetting) {
+                                case GROUP_COURSE_RESET_SETTING_DISCONNECT_AND_CREATE_NEW:
+                                    $coursegroups->process_course_reset_group($course, $o365object, true);
+                                    break;
+                                case GROUP_COURSE_RESET_SETTING_DISCONNECT_AND_CREATE_NEW:
+                                    $coursegroups->process_course_reset_group($course, $o365object, false);
+                                    utils::set_course_group_enabled($courseid, false, true);
+                                    break;
+                            }
+                        }
+                    }
+                }
+
+                break;
+            case TEAMS_GROUP_COURSE_RESET_SITE_SETTING_DISCONNECT_AND_CREATE_NEW:
+                if ($connectedtoteam) {
+                    $coursegroups->process_course_reset_team($course, $o365object, true);
+                } else {
+                    $coursegroups->process_course_reset_group($course, $o365object, true);
+                }
+
+                break;
+            case TEAMS_GROUP_COURSE_RESET_SITE_SETTING_DISCONNECT_ONLY:
+                if ($connectedtoteam) {
+                    $coursegroups->process_course_reset_team($course, $o365object, false);
+                } else {
+                    $coursegroups->process_course_reset_group($course, $o365object, false);
+                }
+                utils::set_course_group_enabled($courseid, false, true);
+
+                break;
+        }
+
         return true;
     }
 }

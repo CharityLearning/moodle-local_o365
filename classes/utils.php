@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * General purpose utility class.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -22,6 +24,8 @@
  */
 
 namespace local_o365;
+
+defined('MOODLE_INTERNAL') || die();
 
 /**
  * General purpose utility class.
@@ -67,16 +71,18 @@ class utils {
     /**
      * Get an app token if available or fall back to system API user token.
      *
-     * @param string $resource The desired resource.
+     * @param string $tokenresource The desired resource.
      * @param \local_o365\oauth2\clientdata $clientdata Client credentials.
      * @param \local_o365\httpclientinterface $httpclient An HTTP client.
+     * @param bool $forcecreate
+     *
      * @return \local_o365\oauth2\apptoken|\local_o365\oauth2\systemapiusertoken An app or system token.
      */
-    public static function get_app_or_system_token($resource, $clientdata, $httpclient) {
+    public static function get_app_or_system_token($tokenresource, $clientdata, $httpclient, $forcecreate = false) {
         $token = null;
         try {
             if (static::is_configured_apponlyaccess() === true) {
-                $token = \local_o365\oauth2\apptoken::instance(null, $resource, $clientdata, $httpclient);
+                $token = \local_o365\oauth2\apptoken::instance(null, $tokenresource, $clientdata, $httpclient, $forcecreate);
             }
         } catch (\Exception $e) {
             static::debug($e->getMessage(), 'get_app_or_system_token (app)', $e);
@@ -84,7 +90,7 @@ class utils {
 
         if (empty($token)) {
             try {
-                $token = \local_o365\oauth2\systemapiusertoken::instance(null, $resource, $clientdata, $httpclient);
+                $token = \local_o365\oauth2\systemapiusertoken::instance(null, $tokenresource, $clientdata, $httpclient);
             } catch (\Exception $e) {
                 static::debug($e->getMessage(), 'get_app_or_system_token (system)', $e);
             }
@@ -150,8 +156,8 @@ class utils {
      * @return bool Whether app-only access is active.
      */
     public static function is_active_apponlyaccess() {
-        return (static::is_configured_apponlyaccess() === true && \local_o365\rest\unified::is_configured() === true)
-            ? true : false;
+        return (static::is_configured_apponlyaccess() === true && \local_o365\rest\unified::is_configured() === true) ?
+            true : false;
     }
 
     /**
@@ -165,14 +171,15 @@ class utils {
         if (empty($userids)) {
             return [];
         }
+        $aadresource = \local_o365\rest\azuread::get_tokenresource();
         list($idsql, $idparams) = $DB->get_in_or_equal($userids);
         $sql = 'SELECT u.id as userid
                   FROM {user} u
              LEFT JOIN {local_o365_token} localtok ON localtok.user_id = u.id
-             LEFT JOIN {auth_oidc_token} authtok ON authtok.resource = ? AND authtok.username = u.username
-                 WHERE u.id '.$idsql.'
+             LEFT JOIN {auth_oidc_token} authtok ON authtok.tokenresource = ? AND authtok.userid = u.id
+                 WHERE u.id ' . $idsql . '
                        AND (localtok.id IS NOT NULL OR authtok.id IS NOT NULL)';
-        $params = ['https://graph.windows.net'];
+        $params = [$aadresource];
         $params = array_merge($params, $idparams);
         $records = $DB->get_recordset_sql($sql, $params);
         $return = [];
@@ -183,53 +190,37 @@ class utils {
     }
 
     /**
-     * Get the UPN of the connected Office 365 account.
+     * Get the UPN of the connected Microsoft 365 account.
      *
      * @param int $userid The Moodle user id.
-     * @return string|null The UPN of the connected Office 365 account, or null if none found.
+     * @return string|null The UPN of the connected Microsoft 365 account, or null if none found.
      */
     public static function get_o365_upn($userid) {
-        global $DB;
-        $sql = 'SELECT *
-                  FROM {auth_oidc_token} tok
-                  JOIN {user} u ON tok.username = u.username
-                 WHERE tok.resource = ? AND u.id = ? ORDER BY tok.id DESC';
-        $params = ['https://graph.windows.net', $userid];
-        $records = $DB->get_records_sql($sql, $params, 0, 1);
-        if (!empty($records)) {
-            $record = reset($records);
-           return (!empty($record) && !empty($record->oidcusername)) ? $record->oidcusername : null;
-        } else {
-            return null;
-        }
+        $o365user = \local_o365\obj\o365user::instance_from_muserid($userid);
+        return (!empty($o365user)) ? $o365user->upn : null;
     }
 
     /**
-     * Determine if a user is connected to Office 365.
+     * Get the object ID of the connected Microsoft 365 account.
+     *
+     * @param int $userid
+     * @return null
+     */
+    public static function get_o365_userid($userid) {
+        $o365user = \local_o365\obj\o365user::instance_from_muserid($userid);
+        return (!empty($o365user)) ? $o365user->objectid : null;
+    }
+
+    /**
+     * Determine if a user is connected to Microsoft 365.
      *
      * @param int $userid The user's ID.
      * @return bool Whether they are connected (true) or not (false).
      */
     public static function is_o365_connected($userid) {
         global $DB;
-        try {
-            if ($DB->record_exists('local_o365_token', ['user_id' => $userid])) {
-                return true;
-            } else {
-                $sql = 'SELECT *
-                          FROM {auth_oidc_token} tok
-                          JOIN {user} u ON tok.username = u.username
-                         WHERE tok.resource = ? AND u.id = ?';
-                $params = ['https://graph.windows.net', $userid];
-                $records = $DB->get_records_sql($sql, $params, 0, 1);
-                if (!empty($records)) {
-                    return true;
-                }
-            }
-            return false;
-        } catch (\Exception $e) {
-            return false;
-        }
+        $o365user = \local_o365\obj\o365user::instance_from_muserid($userid);
+        return (!empty($o365user)) ? true : false;
     }
 
     /**
@@ -268,6 +259,8 @@ class utils {
      * Record a debug message.
      *
      * @param string $message The debug message to log.
+     * @param string $where
+     * @param object $debugdata
      */
     public static function debug($message, $where = '', $debugdata = null) {
         $debugmode = (bool)get_config('local_o365', 'debugmode');
@@ -283,6 +276,9 @@ class utils {
     /**
      * Construct an API client.
      *
+     * @param int|null $userid
+     * @param bool $forcelegacy
+     * @param string $caller
      * @return \local_o365\rest\o365api|bool A constructed user API client (unified or legacy), or throw an error.
      */
     public static function get_api($userid = null, $forcelegacy = false, $caller = 'get_api') {
@@ -293,17 +289,17 @@ class utils {
         }
 
         if ($unifiedconfigured === true) {
-            $resource = \local_o365\rest\unified::get_resource();
+            $tokenresource = \local_o365\rest\unified::get_tokenresource();
         } else {
-            $resource = \local_o365\rest\azuread::get_resource();
+            $tokenresource = \local_o365\rest\azuread::get_tokenresource();
         }
 
         $clientdata = \local_o365\oauth2\clientdata::instance_from_oidc();
         $httpclient = new \local_o365\httpclient();
         if (!empty($userid)) {
-            $token = \local_o365\oauth2\token::instance($userid, $resource, $clientdata, $httpclient);
+            $token = \local_o365\oauth2\token::instance($userid, $tokenresource, $clientdata, $httpclient);
         } else {
-            $token = \local_o365\utils::get_app_or_system_token($resource, $clientdata, $httpclient);
+            $token = static::get_app_or_system_token($tokenresource, $clientdata, $httpclient);
         }
         if (empty($token)) {
             throw new \Exception('No token available for system user. Please run local_o365 health check.');
@@ -318,7 +314,9 @@ class utils {
     }
 
     /**
-     * Enable an additional Office 365 tenant/
+     * Enable an additional Microsoft 365 tenant.
+     *
+     * @param string $tenant
      */
     public static function enableadditionaltenant($tenant) {
         $configuredtenants = get_config('local_o365', 'multitenants');
@@ -351,7 +349,9 @@ class utils {
     }
 
     /**
-     * Disable an additional Office 365 tenant.
+     * Disable an additional Microsoft 365 tenant.
+     *
+     * @param string $tenant
      */
     public static function disableadditionaltenant($tenant) {
         $o365config = get_config('local_o365');
@@ -384,21 +384,18 @@ class utils {
         try {
             $clientdata = \local_o365\oauth2\clientdata::instance_from_oidc();
             $httpclient = new \local_o365\httpclient();
-            $resource = (\local_o365\rest\unified::is_enabled() === true)
-                ? \local_o365\rest\unified::get_resource()
-                : \local_o365\rest\discovery::get_resource();
-            $token = \local_o365\oauth2\token::instance($userid, $resource, $clientdata, $httpclient);
+            $tokenresource = (\local_o365\rest\unified::is_enabled() === true) ?
+                \local_o365\rest\unified::get_tokenresource() : \local_o365\rest\discovery::get_tokenresource();
+            $token = \local_o365\oauth2\token::instance($userid, $tokenresource, $clientdata, $httpclient);
             if (!empty($token)) {
-                $apiclient = (\local_o365\rest\unified::is_enabled() === true)
-                    ? new \local_o365\rest\unified($token, $httpclient)
-                    : new \local_o365\rest\discovery($token, $httpclient);
+                $apiclient = (\local_o365\rest\unified::is_enabled() === true) ?
+                    new \local_o365\rest\unified($token, $httpclient) : new \local_o365\rest\discovery($token, $httpclient);
                 $tenant = $apiclient->get_tenant();
                 $tenant = clean_param($tenant, PARAM_TEXT);
-                return ($tenant != get_config('local_o365', 'aadtenant'))
-                    ? $tenant : '';
+                return ($tenant != get_config('local_o365', 'aadtenant')) ? $tenant : '';
             }
         } catch (\Exception $e) {
-
+            // Do nothing.
         }
         return '';
     }
@@ -413,21 +410,18 @@ class utils {
         try {
             $clientdata = \local_o365\oauth2\clientdata::instance_from_oidc();
             $httpclient = new \local_o365\httpclient();
-            $resource = (\local_o365\rest\unified::is_enabled() === true)
-                ? \local_o365\rest\unified::get_resource()
-                : \local_o365\rest\discovery::get_resource();
-            $token = \local_o365\oauth2\token::instance($userid, $resource, $clientdata, $httpclient);
+            $tokenresource = (\local_o365\rest\unified::is_enabled() === true) ?
+                \local_o365\rest\unified::get_tokenresource() : \local_o365\rest\discovery::get_tokenresource();
+            $token = \local_o365\oauth2\token::instance($userid, $tokenresource, $clientdata, $httpclient);
             if (!empty($token)) {
-                $apiclient = (\local_o365\rest\unified::is_enabled() === true)
-                    ? new \local_o365\rest\unified($token, $httpclient)
-                    : new \local_o365\rest\discovery($token, $httpclient);
+                $apiclient = (\local_o365\rest\unified::is_enabled() === true) ?
+                    new \local_o365\rest\unified($token, $httpclient) : new \local_o365\rest\discovery($token, $httpclient);
                 $tenant = $apiclient->get_odburl();
                 $tenant = clean_param($tenant, PARAM_TEXT);
-                return ($tenant != get_config('local_o365', 'odburl'))
-                    ? $tenant : '';
+                return ($tenant != get_config('local_o365', 'odburl')) ? $tenant : '';
             }
         } catch (\Exception $e) {
-
+            // Do nothing.
         }
         return '';
     }

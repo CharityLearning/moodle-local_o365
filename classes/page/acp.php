@@ -15,18 +15,34 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Admin control panel page.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
+ * @author Lai Wei <lai.wei@enovation.ie>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @copyright (C) 2014 onwards Microsoft, Inc. (http://microsoft.com/)
  */
 
 namespace local_o365\page;
 
+defined('MOODLE_INTERNAL') || die();
+
 /**
  * Admin control panel page.
  */
 class acp extends base {
+
+    /**
+     * Override set_title() function - not showing heading.
+     *
+     * @param string $title
+     */
+    public function set_title($title) {
+        global $PAGE;
+        $this->title = $title;
+        $PAGE->set_title($this->title);
+    }
 
     /**
      * Add base navbar for this page.
@@ -42,6 +58,7 @@ class acp extends base {
                 break;
             case 'healthcheck':
             case 'usermatch':
+            case 'teamconnections':
             case 'maintenance':
                 $extra = '&s_local_o365_tabs=2';
                 break;
@@ -86,7 +103,13 @@ class acp extends base {
      */
     public function checktenantsetup() {
         $config = get_config('local_o365');
-        return (!empty($config->systemtokens) && !empty($config->aadtenant)) ? true : false;
+        if (empty($config->aadtenant)) {
+            return false;
+        }
+        if (\local_o365\utils::is_configured_apponlyaccess() === true || !empty($config->systemtokens)) {
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -311,7 +334,7 @@ class acp extends base {
                                         $newrec = new \stdClass;
                                         $newrec->musername = trim($data[0]);
                                         $newrec->o365username = trim($data[1]);
-                                        $newrec->openidconnect = (isset($data[2]) &&  intval(trim($data[2]))) >  0  ? 1 : 0;
+                                        $newrec->openidconnect = (isset($data[2]) &&  intval(trim($data[2]))) > 0 ? 1 : 0;
                                         $newrec->completed = 0;
                                         $newrec->errormessage = '';
                                         $DB->insert_record('local_o365_matchqueue', $newrec);
@@ -466,12 +489,17 @@ class acp extends base {
     }
 
     /**
-     * Endpoint to change user group customization.
+     * Endpoint to change Teams customization.
      */
     public function mode_usergroupcustom_change() {
-        $coursedata = json_decode(required_param('coursedata', PARAM_RAW), true);
         require_sesskey();
 
+        // Save enabled by default on new course settings.
+        $enabledfornewcourse = required_param('newcourse', PARAM_BOOL);
+        set_config('sync_new_course', $enabledfornewcourse, 'local_o365');
+
+        // Save course settings.
+        $coursedata = json_decode(required_param('coursedata', PARAM_RAW), true);
         foreach ($coursedata as $courseid => $course) {
             if (!is_scalar($courseid) || ((string)$courseid !== (string)(int)$courseid)) {
                 // Non-intlike courseid value. Invalid. Skip.
@@ -484,7 +512,7 @@ class acp extends base {
                 }
                 if ($feature === 'enabled') {
                     \local_o365\feature\usergroups\utils::set_course_group_enabled($courseid, $value);
-                } else if (in_array($feature, ['onedrive', 'calendar', 'conversations', 'notebook'])) {
+                } else if (in_array($feature, ['team'])) {
                     \local_o365\feature\usergroups\utils::set_course_group_feature_enabled($courseid, [$feature], $value);
                 }
             }
@@ -493,7 +521,7 @@ class acp extends base {
     }
 
     /**
-     * Endpoint to change user group customization.
+     * Endpoint to change Teams customization.
      */
     public function mode_usergroupcustom_bulkchange() {
         $enabled = (bool)required_param('state', PARAM_BOOL);
@@ -504,12 +532,31 @@ class acp extends base {
     }
 
     /**
-     * User group customization.
+     * Enable / disable all sync features on all course when using custom settings.
+     */
+    public function mode_usergroupcustom_allchange() {
+        global $DB;
+
+        $enabled = (bool)required_param('state', PARAM_BOOL);
+        require_sesskey();
+
+        $courses = $DB->get_records('course');
+        foreach ($courses as $course) {
+            if ($course->id == SITEID) {
+                continue;
+            }
+            \local_o365\feature\usergroups\utils::set_course_group_enabled($course->id, $enabled);
+        }
+    }
+
+    /**
+     * Teams customization.
      */
     public function mode_usergroupcustom() {
-        global $OUTPUT, $PAGE;
+        global $CFG, $OUTPUT, $PAGE;
 
-        $PAGE->navbar->add(get_string('acp_usergroupcustom', 'local_o365'), new \moodle_url($this->url, ['mode' => 'usergroupcustom']));
+        $PAGE->navbar->add(get_string('acp_usergroupcustom', 'local_o365'),
+            new \moodle_url($this->url, ['mode' => 'usergroupcustom']));
 
         $totalcount = 0;
         $perpage = 20;
@@ -520,17 +567,17 @@ class acp extends base {
         $sortdir = strtolower(optional_param('sortdir', 'asc', PARAM_ALPHA));
 
         $headers = [
-            'shortname' => get_string('shortnamecourse'),
             'fullname' => get_string('fullnamecourse'),
+            'shortname' => get_string('shortnamecourse'),
         ];
         if (empty($sort) || !isset($headers[$sort])) {
-            $sort = 'shortname';
+            $sort = 'fullname';
         }
         if (!in_array($sortdir, ['asc', 'desc'], true)) {
             $sortdir = 'asc';
         }
 
-        $table = new \html_table;
+        $table = new \html_table();
         foreach ($headers as $hkey => $desc) {
             $diffsortdir = ($sort === $hkey && $sortdir === 'asc') ? 'desc' : 'asc';
             $linkattrs = ['mode' => 'usergroupcustom', 'sort' => $hkey, 'sortdir' => $diffsortdir];
@@ -542,16 +589,25 @@ class acp extends base {
             $table->head[] = \html_writer::link($link, $desc);
         }
         $table->head[] = get_string('acp_usergroupcustom_enabled', 'local_o365');
-        $table->head[] = get_string('groups_onedrive', 'local_o365');
-        $table->head[] = get_string('groups_calendar', 'local_o365');
-        $table->head[] = get_string('groups_conversations', 'local_o365');
-        $table->head[] = get_string('groups_notebook', 'local_o365');
+        $table->head[] = get_string('groups_team', 'local_o365');
 
         $limitfrom = $curpage * $perpage;
         $coursesid = [];
 
         if (empty($search)) {
-            $courses = get_courses_page('all', 'c.'.$sort.' '.$sortdir, 'c.*', $totalcount, $limitfrom, $perpage);
+            $sortdir = 1;
+            if ($sortdir == 'desc') {
+                $sortdir = -1;
+            }
+            $options = [
+                'recursive' => true,
+                'sort' => [$sort => $sortdir],
+                'offset' => $limitfrom,
+                'limit' => $perpage,
+            ];
+            $topcat = \core_course_category::get(0);
+            $courses = $topcat->get_courses($options);
+            $totalcount = $topcat->get_courses_count($options);
         } else {
             $searchar = explode(' ', $search);
             $courses = get_courses_search($searchar, 'c.'.$sort.' '.$sortdir, $curpage, $perpage, $totalcount);
@@ -564,46 +620,27 @@ class acp extends base {
             $coursesid[] = $course->id;
             $isenabled = \local_o365\feature\usergroups\utils::course_is_group_enabled($course->id);
             $enabledname = 'course_'.$course->id.'_enabled';
-            $onedriveenabled = \local_o365\feature\usergroups\utils::course_is_group_feature_enabled($course->id, 'onedrive');
-            $onedrivename = 'course_onedrive_'.$course->id.'_enabled';
-            $calendarenabled = \local_o365\feature\usergroups\utils::course_is_group_feature_enabled($course->id, 'calendar');
-            $calendarname = 'course_calendar_'.$course->id.'_enabled';
-            $convenabled = \local_o365\feature\usergroups\utils::course_is_group_feature_enabled($course->id, 'conversations');
-            $convname = 'course_conversations_'.$course->id.'_enabled';
-            $notebookenabled = \local_o365\feature\usergroups\utils::course_is_group_feature_enabled($course->id, 'notebook');
-            $notebookname = 'course_notebook_'.$course->id.'_enabled';
+            $teamenabled = \local_o365\feature\usergroups\utils::course_is_group_feature_enabled($course->id, 'team');
+            $teamname = 'course_team_' . $course->id . '_enabled';
 
             $enablecheckboxattrs = [
                 'onchange' => 'local_o365_set_usergroup(\''.$course->id.'\', $(this).prop(\'checked\'), $(this))'
             ];
-            $onedrivecheckboxattrs = [
-                'class' => 'feature feature_onedrive',
-            ];
-            $calendarcheckboxattrs = [
-                'class' => 'feature feature_calendar',
-            ];
-            $convcheckboxattrs = [
-                'class' => 'feature feature_conversations',
-            ];
-            $notebookcheckboxattrs = [
-                'class' => 'feature feature_notebook',
+            $teamcheckboxattrs = [
+                'class' => 'feature feature_teams',
             ];
 
             if ($isenabled !== true) {
-                $onedrivecheckboxattrs['disabled'] = '';
-                $calendarcheckboxattrs['disabled'] = '';
-                $convcheckboxattrs['disabled'] = '';
-                $notebookcheckboxattrs['disabled'] = '';
+                $teamcheckboxattrs['disabled'] = '';
             }
 
+            $courseurl = new \moodle_url('/course/view.php', ['id' => $course->id]);
+
             $rowdata = [
+                \html_writer::link($courseurl, $course->fullname),
                 $course->shortname,
-                $course->fullname,
                 \html_writer::checkbox($enabledname, 1, $isenabled, '', $enablecheckboxattrs),
-                \html_writer::checkbox($onedrivename, 1, $onedriveenabled, '', $onedrivecheckboxattrs),
-                \html_writer::checkbox($calendarname, 1, $calendarenabled, '', $calendarcheckboxattrs),
-                \html_writer::checkbox($convname, 1, $convenabled, '', $convcheckboxattrs),
-                \html_writer::checkbox($notebookname, 1, $notebookenabled, '', $notebookcheckboxattrs),
+                \html_writer::checkbox($teamname, 1, $teamenabled, '', $teamcheckboxattrs),
             ];
             $table->data[] = $rowdata;
         }
@@ -613,6 +650,9 @@ class acp extends base {
 
         $endpoint = new \moodle_url('/local/o365/acp.php', ['mode' => 'usergroupcustom_change', 'sesskey' => sesskey()]);
         $bulkendpoint = new \moodle_url('/local/o365/acp.php', ['mode' => 'usergroupcustom_bulkchange', 'sesskey' => sesskey()]);
+        $custompageurl = new \moodle_url('/local/o365/acp.php', ['mode' => 'usergroupcustom']);
+        $allchangeendpoint = new \moodle_url('/local/o365/acp.php',
+            ['mode' => 'usergroupcustom_allchange', 'sesskey' => sesskey()]);
 
         $js = 'var local_o365_set_usergroup = function(courseid, state, checkbox) { ';
         $js .= 'data = {courseid: courseid, state: state}; ';
@@ -629,7 +669,21 @@ class acp extends base {
         $js .= '$("input.feature_"+feature+":not(:disabled)").prop("checked", enabled); ';
         $js .= '}; ';
         $js .= 'var local_o365_usergroup_coursesid = '.json_encode($coursesid).'; ';
-        $js .= 'var local_o365_usergroup_features = ["calendar", "onedrive", "conversations", "notebook"]; ';
+        $js .= 'var local_o365_usergroup_features = ["team"]; ';
+
+        $js .= 'var local_o365_usergroup_all_set_feature = function(state) {';
+        $js .= 'var enabled = (state == 1) ? true : false; ';
+        $js .= ' // Send data to server. ' . "\n";
+        $js .= '$.ajax({
+            url: \'' . $allchangeendpoint->out(false) . '\',
+            data: {state: enabled},
+            type: "POST",
+            success: function(data) {
+                console.log(data);
+                window.location.href = "' . $custompageurl->out(false) . '";
+            }
+        });' . "\n";
+        $js .= '}; ' . "\n";
 
         $js .= 'var local_o365_usergroup_save = function() { '."\n";
         $js .= 'var coursedata = {}; '."\n";
@@ -651,7 +705,10 @@ class acp extends base {
         $js .= ' // Send data to server. '."\n";
         $js .= '$.ajax({
             url: \''.$endpoint->out(false).'\',
-            data: {coursedata: JSON.stringify(coursedata)},
+            data: {
+                coursedata: JSON.stringify(coursedata),
+                newcourse: $("input#id_s_local_o365_sync_new_course").prop("checked"),
+            },
             type: "POST",
             success: function(data) {
                 console.log(data);
@@ -663,32 +720,28 @@ class acp extends base {
         echo \html_writer::script($js);
         echo \html_writer::tag('h2', get_string('acp_usergroupcustom', 'local_o365'));
 
-        // Bulk Operations
+        // Option to enable all sync features on all pages.
+        echo \html_writer::tag('button', get_string('acp_usrgroupcustom_enable_all', 'local_o365'),
+            ['onclick' => 'local_o365_usergroup_all_set_feature(1)']);
+
+        // Option to enable sync by default for new courses.
+        require_once($CFG->libdir . '/adminlib.php');
+        $enablefornewcourse = new \admin_setting_configcheckbox('local_o365/sync_new_course',
+            get_string('acp_usergroupcustom_new_course', 'local_o365'),
+            get_string('acp_usergroupcustom_new_course_desc', 'local_o365'), '0');
+        echo $enablefornewcourse->output_html(get_config('local_o365', 'sync_new_course'));
+
+        // Bulk Operations.
         $strbulkenable = get_string('acp_usergroupcustom_bulk_enable', 'local_o365');
         $strbulkdisable = get_string('acp_usergroupcustom_bulk_disable', 'local_o365');
+
         echo \html_writer::tag('h5', get_string('acp_usergroupcustom_bulk', 'local_o365'));
-        echo \html_writer::start_tag('div', ['style' => 'display: inline-block;margin: 0 1rem']);
-        echo \html_writer::tag('span', get_string('groups_onedrive', 'local_o365').': ');
-        echo \html_writer::tag('button', $strbulkenable, ['onclick' => 'local_o365_usergroup_bulk_set_feature(\'onedrive\', 1)']);
-        echo \html_writer::tag('button', $strbulkdisable, ['onclick' => 'local_o365_usergroup_bulk_set_feature(\'onedrive\', 0)']);
-        echo \html_writer::end_tag('div');
+        echo \html_writer::tag('h6', get_string('acp_usergroupcustom_bulk_help', 'local_o365'));
 
         echo \html_writer::start_tag('div', ['style' => 'display: inline-block;margin: 0 1rem']);
-        echo \html_writer::tag('span', get_string('groups_calendar', 'local_o365').': ');
-        echo \html_writer::tag('button', $strbulkenable, ['onclick' => 'local_o365_usergroup_bulk_set_feature(\'calendar\', 1)']);
-        echo \html_writer::tag('button', $strbulkdisable, ['onclick' => 'local_o365_usergroup_bulk_set_feature(\'calendar\', 0)']);
-        echo \html_writer::end_tag('div');
-
-        echo \html_writer::start_tag('div', ['style' => 'display: inline-block;margin: 0 1rem']);
-        echo \html_writer::tag('span', get_string('groups_conversations', 'local_o365').': ');
-        echo \html_writer::tag('button', $strbulkenable, ['onclick' => 'local_o365_usergroup_bulk_set_feature(\'conversations\', 1)']);
-        echo \html_writer::tag('button', $strbulkdisable, ['onclick' => 'local_o365_usergroup_bulk_set_feature(\'conversations\', 0)']);
-        echo \html_writer::end_tag('div');
-
-        echo \html_writer::start_tag('div', ['style' => 'display: inline-block;margin: 0 1rem']);
-        echo \html_writer::tag('span', get_string('groups_notebook', 'local_o365').': ');
-        echo \html_writer::tag('button', $strbulkenable, ['onclick' => 'local_o365_usergroup_bulk_set_feature(\'notebook\', 1)']);
-        echo \html_writer::tag('button', $strbulkdisable, ['onclick' => 'local_o365_usergroup_bulk_set_feature(\'notebook\', 0)']);
+        echo \html_writer::tag('span', get_string('groups_team', 'local_o365').': ');
+        echo \html_writer::tag('button', $strbulkenable, ['onclick' => 'local_o365_usergroup_bulk_set_feature(\'teams\', 1)']);
+        echo \html_writer::tag('button', $strbulkdisable, ['onclick' => 'local_o365_usergroup_bulk_set_feature(\'teams\', 0)']);
         echo \html_writer::end_tag('div');
 
         // Search form.
@@ -696,7 +749,8 @@ class acp extends base {
         echo \html_writer::start_tag('form', ['id' => 'coursesearchform', 'method' => 'get']);
         echo \html_writer::start_tag('fieldset', ['class' => 'coursesearchbox invisiblefieldset']);
         echo \html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'mode', 'value' => 'usergroupcustom']);
-        echo \html_writer::empty_tag('input', ['type' => 'text', 'id' => 'coursesearchbox', 'size' => 30, 'name' => 'search', 'value' => s($search)]);
+        echo \html_writer::empty_tag('input', ['type' => 'text', 'id' => 'coursesearchbox', 'size' => 30, 'name' => 'search',
+            'value' => s($search)]);
         echo \html_writer::empty_tag('input', ['type' => 'submit', 'value' => get_string('go')]);
         echo \html_writer::div(\html_writer::tag('strong', get_string('acp_usergroupcustom_searchwarning', 'local_o365')));
         echo \html_writer::end_tag('fieldset');
@@ -705,32 +759,601 @@ class acp extends base {
 
         echo \html_writer::tag('h5', get_string('courses'));
         echo \html_writer::table($table);
-        echo \html_writer::tag('p', get_string('acp_usergroupcustom_savemessage', 'local_o365'), ['id' => 'acp_usergroupcustom_savemessage', 'style' => 'display: none; font-weight: bold; color: red']);
-        echo  \html_writer::tag('button', get_string('savechanges'), ['class'=>'buttonsbar', 'onclick' => 'local_o365_usergroup_save()']);
-        $cururl = new \moodle_url('/local/o365/acp.php', ['mode' => 'usergroupcustom']);
+        echo \html_writer::tag('p', get_string('acp_usergroupcustom_savemessage', 'local_o365'),
+            ['id' => 'acp_usergroupcustom_savemessage', 'style' => 'display: none; font-weight: bold; color: red']);
+        echo  \html_writer::tag('button', get_string('savechanges'),
+            ['class' => 'buttonsbar', 'onclick' => 'local_o365_usergroup_save()']);
+
+        $searchtext = optional_param('search', '', PARAM_TEXT);
+        $cururl = new \moodle_url('/local/o365/acp.php', ['mode' => 'usergroupcustom', 'search' => $searchtext]);
         echo $OUTPUT->paging_bar($totalcount, $curpage, $perpage, $cururl);
         $this->standard_footer();
     }
 
     /**
-     * Resync deleted office 365 groups for courses and Moodle groups.
+     * Teams connections.
+     */
+    public function mode_teamconnections() {
+        global $DB, $OUTPUT, $PAGE;
+
+        $PAGE->navbar->add(get_string('acp_teamconnections', 'local_o365'),
+            new \moodle_url($this->url, ['mode' => 'teamconnections']));
+
+        // Check settings.
+        $createteams = get_config('local_o365', 'createteams');
+        if ($createteams === 'off') {
+            $redirecturl = new \moodle_url('/admin/settings.php', ['section' => 'local_o365', 's_local_o365_tabs' => 1]);
+            redirect($redirecturl, get_string('acp_teamconnections_sync_disabled', 'local_o365'));
+        }
+
+        $totalcount = 0;
+        $perpage = 20;
+
+        $curpage = optional_param('page', 0, PARAM_INT);
+        $sort = optional_param('sort', '', PARAM_ALPHA);
+        $search = optional_param('search', '', PARAM_TEXT);
+        $sortdir = strtolower(optional_param('sortdir', 'asc', PARAM_ALPHA));
+
+        $headers = [
+            'fullname' => get_string('fullnamecourse'),
+            'shortname' => get_string('shortnamecourse'),
+        ];
+        if (empty($sort) || !isset($headers[$sort])) {
+            $sort = 'fullname';
+        }
+        if (!in_array($sortdir, ['asc', 'desc'], true)) {
+            $sortdir = 'asc';
+        }
+
+        $table = new \html_table();
+        foreach ($headers as $hkey => $desc) {
+            $diffsortdir = ($sort === $hkey && $sortdir === 'asc') ? 'desc' : 'asc';
+            $linkattrs = ['mode' => 'teamconnections', 'sort' => $hkey, 'sortdir' => $diffsortdir];
+            $link = new \moodle_url('/local/o365/acp.php', $linkattrs);
+
+            if ($sort === $hkey) {
+                $desc .= ' ' . $OUTPUT->pix_icon('t/sort_' . $sortdir, 'sort');
+            }
+            $table->head[] = \html_writer::link($link, $desc);
+        }
+        $table->head[] = get_string('acp_teamconnections_connected_team', 'local_o365');
+        $table->head[] = get_string('acp_teamconnections_actions', 'local_o365');
+
+        $limitfrom = $curpage * $perpage;
+        $coursesid = [];
+
+        if (empty($search)) {
+            $sortdir = 1;
+            if ($sortdir == 'desc') {
+                $sortdir = -1;
+            }
+            $options = [
+                'recursive' => true,
+                'sort' => [$sort => $sortdir],
+                'offset' => $limitfrom,
+                'limit' => $perpage,
+            ];
+            $topcat = \core_course_category::get(0);
+            $courses = $topcat->get_courses($options);
+            $totalcount = $topcat->get_courses_count($options);
+        } else {
+            $searchar = explode(' ', $search);
+            $courses = get_courses_search($searchar, 'c.' . $sort . ' ' . $sortdir, $curpage, $perpage, $totalcount);
+        }
+
+        foreach ($courses as $course) {
+            $actions = [];
+
+            if ($course->id == SITEID) {
+                continue;
+            }
+            $coursesid[] = $course->id;
+
+            if ($grouprecord = $DB->get_record('local_o365_objects',
+                ['moodleid' => $course->id, 'type' => 'group', 'subtype' => 'course'])) {
+                if ($teamrecord = $DB->get_record('local_o365_objects',
+                    ['moodleid' => $course->id, 'type' => 'group', 'subtype' => 'courseteam'])) {
+                    // Synced to both group and team.
+                    if ($teamscache = $DB->get_record('local_o365_teams_cache', ['objectid' => $grouprecord->objectid])) {
+                        // Team record can be found in cache.
+                        $existingconnection = \html_writer::link($teamscache->url, $teamscache->name);
+                        $updateurl = new \moodle_url('/local/o365/acp.php',
+                            ['mode' => 'teamconnections_update', 'course' => $course->id, 'sesskey' => sesskey()]);
+                        $updatelabel = get_string('acp_teamconnections_table_update', 'local_o365');
+
+                        $actions = [\html_writer::link($updateurl, $updatelabel)];
+                    } else {
+                        // A matching record exists in local_o365_objects, but the team cannot be found.
+                        // This may be caused by the connection was soft deleted.
+                        $existingconnection = get_string('acp_teamconnections_not_connected', 'local_o365');
+                        $connecturl = new \moodle_url('/local/o365/acp.php',
+                            ['mode' => 'teamconnections_connect', 'course' => $course->id, 'sesskey' => sesskey()]);
+                        $connectlabel = get_string('acp_teamconnections_table_connect', 'local_o365');
+
+                        $actions = [\html_writer::link($connecturl, $connectlabel)];
+                    }
+                } else {
+                    // Synced to group only.
+                    $metadata = (!empty($grouprecord->metadata)) ? json_decode($grouprecord->metadata, true) : [];
+                    if (is_array($metadata) && !empty($metadata['softdelete'])) {
+                        // Deleted group connection.
+                        $existingconnection = get_string('acp_teamconnections_not_connected', 'local_o365');
+                        $connecturl = new \moodle_url('/local/o365/acp.php',
+                            ['mode' => 'teamconnections_connect', 'course' => $course->id, 'sesskey' => sesskey()]);
+                        $connectlabel = get_string('acp_teamconnections_table_connect', 'local_o365');
+
+                        $actions = [\html_writer::link($connecturl, $connectlabel)];
+                    } else if ($teamscache = $DB->get_record('local_o365_teams_cache', ['objectid' => $grouprecord->objectid])) {
+                        // A team is found for the synced group.
+                        $existingconnection = \html_writer::link($teamscache->url, $teamscache->name) . '<br/>' .
+                            get_string('acp_teamconnections_team_exists_but_not_connected', 'local_o365');
+                        $completeconnectionurl = new \moodle_url('/local/o365/acp.php',
+                            ['mode' => 'teamconnections_complete_connection', 'course' => $course->id, 'sesskey' => sesskey()]);
+                        $completeconnectionlabel = get_string('acp_teamconnections_table_complete_connection', 'local_o365');
+
+                        $actions = [\html_writer::link($completeconnectionurl, $completeconnectionlabel)];
+
+                        $connecturl = new \moodle_url('/local/o365/acp.php',
+                            ['mode' => 'teamconnections_connect', 'course' => $course->id, 'sesskey' => sesskey()]);
+                        $connectlabel = get_string('acp_teamconnections_table_connect_to_different_team', 'local_o365');
+                        $actions[] = \html_writer::link($connecturl, $connectlabel);
+                    } else {
+                        // A team does not exist for the synced group.
+                        $teamownerids = \local_o365\feature\usergroups\coursegroups::get_team_owner_ids_by_course_id($course->id);
+
+                        $existingconnection = $grouprecord->o365name . get_string('acp_teamconnections_group_only', 'local_o365');
+
+                        if (!empty($teamownerids)) {
+                            $createteamurl = new \moodle_url('/local/o365/acp.php',
+                                ['mode' => 'teamconnections_create_team', 'course' => $course->id, 'sesskey' => sesskey()]);
+                            $createteamlabel = get_string('acp_teamconnections_table_create_team', 'local_o365');
+
+                            $actions = [\html_writer::link($createteamurl, $createteamlabel)];
+                        } else {
+                            $actions = [\html_writer::span(get_string('acp_teamconnections_table_cannot_create_team_from_group',
+                                'local_o365'))];
+                        }
+
+                        $connecturl = new \moodle_url('/local/o365/acp.php',
+                            ['mode' => 'teamconnections_connect', 'course' => $course->id, 'sesskey' => sesskey()]);
+                        $connectlabel = get_string('acp_teamconnections_table_connect_to_different_team', 'local_o365');
+                        $actions[] = \html_writer::link($connecturl, $connectlabel);
+                    }
+                }
+            } else {
+                $existingconnection = get_string('acp_teamconnections_not_connected', 'local_o365');
+
+                $teamownerids = \local_o365\feature\usergroups\coursegroups::get_team_owner_ids_by_course_id($course->id);
+                if (!empty($teamownerids)) {
+                    $connecturl = new \moodle_url('/local/o365/acp.php',
+                        ['mode' => 'teamconnections_connect', 'course' => $course->id, 'sesskey' => sesskey()]);
+                    $connectlabel = get_string('acp_teamconnections_table_connect', 'local_o365');
+
+                    $actions = [\html_writer::link($connecturl, $connectlabel)];
+                }
+            }
+
+            $actionsfield = implode('<br/>', $actions);
+
+            $courseurl = new \moodle_url('/course/view.php', ['id' => $course->id]);
+
+            $rowdata = [
+                \html_writer::link($courseurl, $course->fullname),
+                $course->shortname,
+                $existingconnection,
+                $actionsfield,
+            ];
+
+            $table->data[] = $rowdata;
+        }
+
+        $PAGE->requires->jquery();
+        $this->standard_header();
+
+        echo \html_writer::tag('h2', get_string('acp_teamconnections_title', 'local_o365'));
+
+        // Cache status.
+        $teamscacheupdated = get_config('local_o365', 'teamscacheupdated');
+        $updatecacheurl = new \moodle_url('/local/o365/acp.php',
+            ['mode' => 'teamconnections_update_cache', 'sesskey' => sesskey()]);
+        $linkparams = ['updateurl' => $updatecacheurl->out()];
+        if ($teamscacheupdated) {
+            $linkparams['lastupdated'] = userdate($teamscacheupdated);
+            echo \html_writer::div(get_string('acp_teamconnections_cache_last_updated', 'local_o365', $linkparams));
+        } else {
+            echo \html_writer::div(get_string('acp_teamconnections_cache_never_updated', 'local_o365', $linkparams));
+        }
+
+        // Search form.
+        echo \html_writer::tag('h5', get_string('search'));
+        echo \html_writer::start_tag('form', ['id' => 'coursesearchform', 'method' => 'get']);
+        echo \html_writer::start_tag('fieldset', ['class' => 'coursesearchbox invisiblefieldset']);
+        echo \html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'mode', 'value' => 'teamconnections']);
+        echo \html_writer::empty_tag('input', ['type' => 'text', 'id' => 'coursesearchbox', 'size' => 30, 'name' => 'search',
+            'value' => s($search)]);
+        echo \html_writer::empty_tag('input', ['type' => 'submit', 'value' => get_string('go')]);
+        echo \html_writer::div(\html_writer::tag('strong', get_string('acp_usergroupcustom_searchwarning', 'local_o365')));
+        echo \html_writer::end_tag('fieldset');
+        echo \html_writer::end_tag('form');
+        echo \html_writer::empty_tag('br');
+
+        echo \html_writer::tag('h5', get_string('courses'));
+        echo \html_writer::table($table);
+
+        $searchtext = optional_param('search', '', PARAM_TEXT);
+        $cururl = new \moodle_url('/local/o365/acp.php', ['mode' => 'teamconnections', 'search' => $searchtext]);
+        echo $OUTPUT->paging_bar($totalcount, $curpage, $perpage, $cururl);
+
+        $this->standard_footer();
+    }
+
+    /**
+     * Update Teams cache.
+     */
+    public function mode_teamconnections_update_cache() {
+        global $DB;
+
+        confirm_sesskey();
+
+        $graphclient = \local_o365\feature\usergroups\utils::get_graphclient();
+        $coursegroups = new \local_o365\feature\usergroups\coursegroups($graphclient);
+        $coursegroups->update_teams_cache();
+
+        $redirecturl = new \moodle_url('/local/o365/acp.php', ['mode' => 'teamconnections']);
+        redirect($redirecturl, get_string('acp_teamconnections_teams_cache_updated', 'local_o365'));
+    }
+
+    /**
+     * Connect a course to a Team.
+     *
+     * @return false
+     */
+    public function mode_teamconnections_connect() {
+        global $DB, $PAGE;
+
+        $courseid = required_param('course', PARAM_INT);
+        confirm_sesskey();
+
+        $redirecturl = new \moodle_url('/local/o365/acp.php', ['mode' => 'teamconnections']);
+
+        if (\local_o365\utils::is_configured() !== true) {
+            throw new \moodle_exception('acp_teamconnections_exception_not_configured', 'local_o365', $redirecturl);
+        }
+
+        if (!$course = $DB->get_record('course', ['id' => $courseid])) {
+            throw new \moodle_exception('acp_teamconnections_exception_course_not_exist', 'local_o365', $redirecturl);
+        }
+
+        if ($DB->record_exists('local_o365_objects', ['type' => 'group', 'subtype' => 'course', 'moodleid' => $courseid])) {
+            $updateurl = new \moodle_url('/local/o365/acp.php',
+                ['mode' => 'teamconnections_update', 'course' => $courseid, 'sesskey' => sesskey()]);
+            redirect($updateurl);
+        }
+
+        [$teamsoptions, $unused] = \local_o365\feature\usergroups\utils::get_teams_options();
+
+        $urlparams = ['mode' => 'teamconnections_connect', 'course' => $courseid];
+        $connectteamsurl = new \moodle_url('/local/o365/acp.php', $urlparams);
+        $customdata = ['course' => $courseid, 'teamsoptions' => $teamsoptions];
+        $mform = new \local_o365\form\teamsconnection($connectteamsurl, $customdata);
+
+        if ($mform->is_cancelled()) {
+            redirect($redirecturl);
+        } else if ($fromform = $mform->get_data()) {
+            $teamid = $fromform->team;
+
+            if (!$teamid) {
+                redirect($redirecturl);
+            }
+
+            if (!$teamcacherecord = $DB->get_record('local_o365_teams_cache', ['id' => $teamid])) {
+                throw new \moodle_exception('acp_teamconnections_exception_invalid_team_id', 'local_o365', $redirecturl);
+            } else if ($DB->record_exists('local_o365_objects',
+                ['type' => 'group', 'subtype' => 'course', 'objectid' => $teamcacherecord->objectid])) {
+                throw new \moodle_exception('acp_teamconnections_exception_team_already_connected', 'local_o365', $redirecturl);
+            }
+
+            // Create record in local_o365_object table.
+            if ($grouprecord = $DB->get_record('local_o365_objects',
+                ['type' => 'group', 'subtype' => 'course', 'moodleid' => $courseid])) {
+                $grouprecord->objectid = $teamcacherecord->objectid;
+                $grouprecord->o365name = $teamcacherecord->name;
+                $grouprecord->metadata = null;
+                $DB->update_record('local_o365_objects', $grouprecord);
+            } else {
+                $grouprecord = new \stdClass();
+                $grouprecord->type = 'group';
+                $grouprecord->subtype = 'course';
+                $grouprecord->objectid = $teamcacherecord->objectid;
+                $grouprecord->moodleid = $courseid;
+                $grouprecord->o365name = $teamcacherecord->name;
+                $grouprecord->timecreated = time();
+                $grouprecord->timemodified = $grouprecord->timecreated;
+                $DB->insert_record('local_o365_objects', $grouprecord);
+            }
+
+            if ($teamrecord = $DB->get_record('local_o365_objects',
+                ['type' => 'group', 'subtype' => 'courseteam', 'moodleid' => $courseid])) {
+                $teamrecord->objectid = $teamcacherecord->objectid;
+                $teamrecord->o365name = $teamcacherecord->name;
+                $DB->update_record('local_o365_objects', $teamrecord);
+            } else {
+                $teamrecord = new \stdClass();
+                $teamrecord->type = 'group';
+                $teamrecord->subtype = 'courseteam';
+                $teamrecord->objectid = $teamcacherecord->objectid;
+                $teamrecord->moodleid = $courseid;
+                $teamrecord->o365name = $teamcacherecord->name;
+                $teamrecord->timecreated = time();
+                $teamrecord->timemodified = $teamrecord->timecreated;
+                $DB->insert_record('local_o365_objects', $teamrecord);
+            }
+
+            // Update course sync settings.
+            \local_o365\feature\usergroups\utils::set_course_group_enabled($courseid, true, false);
+            \local_o365\feature\usergroups\utils::set_course_group_feature_enabled($courseid, ['team'], true);
+
+            // Sync users and create team tab.
+            $graphclient = \local_o365\feature\usergroups\utils::get_graphclient();
+            $coursegroups = new \local_o365\feature\usergroups\coursegroups($graphclient);
+
+            // Sync users.
+            $coursegroups->resync_group_membership($courseid, $teamcacherecord->objectid);
+
+            // Provision app, add tab.
+            $moodleappid = get_config('local_o365', 'moodle_app_id');
+            if ($moodleappid) {
+                $coursegroups->add_moodle_tab_in_teams($courseid, $teamcacherecord->objectid, $moodleappid);
+            }
+
+            redirect($redirecturl, get_string('acp_teamconnections_course_connected', 'local_o365'));
+        } else {
+            $url = new \moodle_url($this->url, ['mode' => 'teamconnections']);
+            $PAGE->navbar->add(get_string('acp_teamconnections', 'local_o365'), $url);
+            $PAGE->requires->jquery();
+            $this->standard_header();
+            echo \html_writer::tag('h4', get_string('acp_teamconnections_form_connect_course', 'local_o365', $course->fullname));
+            $mform->display();
+            $this->standard_footer();
+        }
+    }
+
+    /**
+     * Update the connection between a course and a Team.
+     *
+     * @return false
+     */
+    public function mode_teamconnections_update() {
+        global $DB, $PAGE;
+
+        $courseid = required_param('course', PARAM_INT);
+        confirm_sesskey();
+
+        $redirecturl = new \moodle_url('/local/o365/acp.php', ['mode' => 'teamconnections']);
+
+        if (\local_o365\utils::is_configured() !== true) {
+            throw new \moodle_exception('acp_teamconnections_exception_not_configured', 'local_o365', $redirecturl);
+        }
+
+        if (!$course = $DB->get_record('course', ['id' => $courseid])) {
+            throw new \moodle_exception('acp_teamconnections_exception_course_not_exist', 'local_o365', $redirecturl);
+        }
+
+        if (!$groupobject = $DB->get_record('local_o365_objects',
+            ['type' => 'group', 'subtype' => 'course', 'moodleid' => $courseid])) {
+            $connecturl = new \moodle_url('/local/o365/acp.php',
+                ['mode' => 'teamconnections_connect', 'course' => $courseid, 'sesskey' => sesskey()]);
+            redirect($connecturl);
+        }
+
+        [$teamsoptions, $connectedteamrecordid] = \local_o365\feature\usergroups\utils::get_teams_options($groupobject->objectid);
+
+        $urlparams = ['mode' => 'teamconnections_update', 'course' => $courseid];
+        $updateconnectionurl = new \moodle_url('/local/o365/acp.php', $urlparams);
+        $customdata = ['course' => $courseid, 'teamsoptions' => $teamsoptions];
+        $mform = new \local_o365\form\teamsconnection($updateconnectionurl, $customdata);
+        $mform->set_data(['team' => $connectedteamrecordid]);
+
+        if ($mform->is_cancelled()) {
+            redirect($redirecturl);
+        } else if ($fromform = $mform->get_data()) {
+            $teamid = $fromform->team;
+
+            if (!$teamid) {
+                redirect($redirecturl);
+            }
+
+            if (!$teamcacherecord = $DB->get_record('local_o365_teams_cache', ['id' => $teamid])) {
+                throw new \moodle_exception('acp_teamconnections_exception_invalid_team_id', 'local_o365', $redirecturl);
+            } else if ($teamobjectrecord = $DB->get_record('local_o365_objects',
+                ['type' => 'group', 'subtype' => 'course', 'objectid' => $teamcacherecord->objectid])) {
+                if ($teamobjectrecord->moodleid == $courseid) {
+                    redirect($redirecturl);
+                } else {
+                    throw new \moodle_exception('acp_teamconnections_exception_team_already_connected', 'local_o365', $redirecturl);
+                }
+            }
+
+            // Create record in local_o365_object table.
+            if ($grouprecord = $DB->get_record('local_o365_objects',
+                ['type' => 'group', 'subtype' => 'course', 'moodleid' => $courseid])) {
+                $grouprecord->objectid = $teamcacherecord->objectid;
+                $grouprecord->o365name = $teamcacherecord->name;
+                $grouprecord->metadata = null;
+                $DB->update_record('local_o365_objects', $grouprecord);
+            } else {
+                $grouprecord = new \stdClass();
+                $grouprecord->type = 'group';
+                $grouprecord->subtype = 'course';
+                $grouprecord->objectid = $teamcacherecord->objectid;
+                $grouprecord->moodleid = $courseid;
+                $grouprecord->o365name = $teamcacherecord->name;
+                $grouprecord->timecreated = time();
+                $grouprecord->timemodified = $grouprecord->timecreated;
+                $DB->insert_record('local_o365_objects', $grouprecord);
+            }
+
+            if ($teamrecord = $DB->get_record('local_o365_objects',
+                ['type' => 'group', 'subtype' => 'courseteam', 'moodleid' => $courseid])) {
+                $teamrecord->objectid = $teamcacherecord->objectid;
+                $teamrecord->o365name = $teamcacherecord->name;
+                $DB->update_record('local_o365_objects', $teamrecord);
+            } else {
+                $teamrecord = new \stdClass();
+                $teamrecord->type = 'group';
+                $teamrecord->subtype = 'courseteam';
+                $teamrecord->objectid = $teamcacherecord->objectid;
+                $teamrecord->moodleid = $courseid;
+                $teamrecord->o365name = $teamcacherecord->name;
+                $teamrecord->timecreated = time();
+                $teamrecord->timemodified = $teamrecord->timecreated;
+                $DB->insert_record('local_o365_objects', $teamrecord);
+            }
+
+            // Update course sync settings.
+            \local_o365\feature\usergroups\utils::set_course_group_enabled($courseid, true, false);
+            \local_o365\feature\usergroups\utils::set_course_group_feature_enabled($courseid, ['team'], true);
+
+            // Sync users and create team tab.
+            $graphclient = \local_o365\feature\usergroups\utils::get_graphclient();
+            $coursegroups = new \local_o365\feature\usergroups\coursegroups($graphclient);
+
+            // Sync users.
+            $coursegroups->resync_group_membership($courseid, $teamcacherecord->objectid);
+
+            // Provision app, add tab.
+            $moodleappid = get_config('local_o365', 'moodle_app_id');
+            if ($moodleappid) {
+                $coursegroups->add_moodle_tab_in_teams($courseid, $teamcacherecord->objectid, $moodleappid);
+            }
+
+            redirect($redirecturl, get_string('acp_teamconnections_course_connected', 'local_o365'));
+        } else {
+            $url = new \moodle_url($this->url, ['mode' => 'teamconnections']);
+            $PAGE->navbar->add(get_string('acp_teamconnections', 'local_o365'), $url);
+            $PAGE->requires->jquery();
+            $this->standard_header();
+            echo \html_writer::tag('h4', get_string('acp_teamconnections_form_connect_course', 'local_o365', $course->fullname));
+            $mform->display();
+            $this->standard_footer();
+        }
+    }
+
+    /**
+     * Connect a course that was synced only to Group but not Team to an existing Team associated with the Group.
+     */
+    public function mode_teamconnections_complete_connection() {
+        global $DB;
+
+        $courseid = required_param('course', PARAM_INT);
+        confirm_sesskey();
+
+        $redirecturl = new \moodle_url('/local/o365/acp.php', ['mode' => 'teamconnections']);
+
+        if (!$grouprecord = $DB->get_record('local_o365_objects',
+            ['moodleid' => $courseid, 'type' => 'group', 'subtype' => 'course'])) {
+            throw new \moodle_exception('acp_teamconnections_exception_course_not_connected_to_group', 'local_o365', $redirecturl);
+        }
+
+        if (!$DB->record_exists('local_o365_teams_cache', ['objectid' => $grouprecord->objectid])) {
+            throw new \moodle_exception('acp_teamconnections_exception_team_does_not_exist', 'local_o365', $redirecturl);
+        }
+
+        // Add record for the Team in local_o365_objects.
+        if (!$teamrecord = $DB->get_record('local_o365_objects',
+            ['moodleid' => $courseid, 'type' => 'group', 'subtype' => 'courseteam'])) {
+            $teamrecord = clone($grouprecord);
+            $teamrecord->subtype = 'courseteam';
+            $DB->insert_record('local_o365_objects', $teamrecord);
+        }
+
+        // Update settings.
+        \local_o365\feature\usergroups\utils::set_course_group_feature_enabled($courseid, ['team'], true);
+
+        // Sync users and create team tab.
+        $graphclient = \local_o365\feature\usergroups\utils::get_graphclient();
+        $coursegroups = new \local_o365\feature\usergroups\coursegroups($graphclient);
+
+        // Sync users.
+        $coursegroups->resync_group_membership($courseid, $grouprecord->objectid);
+
+        // Provision app, add tab.
+        $moodleappid = get_config('local_o365', 'moodle_app_id');
+        if ($moodleappid) {
+            $coursegroups->add_moodle_tab_in_teams($courseid, $grouprecord->objectid, $moodleappid);
+        }
+
+        redirect($redirecturl, get_string('acp_teamconnections_connection_completed', 'local_o365'));
+    }
+
+    /**
+     * Create a Team for a course from the synced Group.
+     */
+    public function mode_teamconnections_create_team() {
+        global $DB;
+
+        $courseid = required_param('course', PARAM_INT);
+        confirm_sesskey();
+
+        $redirecturl = new \moodle_url('/local/o365/acp.php', ['mode' => 'teamconnections']);
+
+        if (!$grouprecord = $DB->get_record('local_o365_objects',
+            ['moodleid' => $courseid, 'type' => 'group', 'subtype' => 'course'])) {
+            throw new \moodle_exception('acp_teamconnections_exception_course_not_connected_to_group', 'local_o365', $redirecturl);
+        }
+
+        if ($teamrecord = $DB->get_record('local_o365_objects',
+            ['moodleid' => $courseid, 'type' => 'group', 'subtype' => 'courseteam'])) {
+            redirect($redirecturl, get_string('acp_teamconnections_team_already_connected', 'local_o365'));
+        }
+
+        if ($DB->record_exists('local_o365_teams_cache', ['objectid' => $grouprecord->objectid])) {
+            $completeconnectionurl = new \moodle_url('/local/o365/acp.php',
+                ['mode' => 'teamconnections_complete_connection', 'course' => $courseid, 'sesskey' => sesskey()]);
+            redirect($completeconnectionurl);
+        }
+
+        $teamownerids = \local_o365\feature\usergroups\coursegroups::get_team_owner_ids_by_course_id($courseid);
+        if (empty($teamownerids)) {
+            throw new \moodle_exception('acp_teamconnections_exception_team_no_owner', 'local_o365', $redirecturl);
+        }
+
+        $graphclient = \local_o365\feature\usergroups\utils::get_graphclient();
+        $coursegroups = new \local_o365\feature\usergroups\coursegroups($graphclient);
+
+        $moodleappid = get_config('local_o365', 'moodle_app_id');
+        try {
+            $coursegroups->create_team($courseid, $grouprecord->objectid, $moodleappid);
+        } catch (\Exception $e) {
+            throw new \moodle_exception('acp_teamconnections_exception_team_creation', 'local_o365', $redirecturl,
+                $e->getMessage());
+        }
+
+        // Update settings.
+        \local_o365\feature\usergroups\utils::set_course_group_feature_enabled($courseid, ['team'], true);
+
+        $redirecturl = new \moodle_url('/local/o365/acp.php', ['mode' => 'teamconnections']);
+        redirect($redirecturl, get_string('acp_teamconnections_team_created', 'local_o365'));
+    }
+
+    /**
+     * Resync deleted Microsoft 365 groups for courses and Moodle groups.
      */
     public function mode_maintenance_coursegroupscheck() {
         global $DB;
         $httpclient = new \local_o365\httpclient();
         $clientdata = \local_o365\oauth2\clientdata::instance_from_oidc();
-        $graphresource = \local_o365\rest\unified::get_resource();
+        $graphresource = \local_o365\rest\unified::get_tokenresource();
         $graphtoken = \local_o365\utils::get_app_or_system_token($graphresource, $clientdata, $httpclient);
         if (empty($graphtoken)) {
             mtrace('Could not get Microsoft Graph API token.');
             return true;
         }
         $graphclient = new \local_o365\rest\unified($graphtoken, $httpclient);
-        $coursegroups = new \local_o365\feature\usergroups\coursegroups($graphclient, $DB, true);
+        $coursegroups = new \local_o365\feature\usergroups\coursegroups($graphclient, true);
         $coursesenabled = \local_o365\feature\usergroups\utils::get_enabled_courses();
         $groupids = $coursegroups->get_all_group_ids();
-        $siterec = $DB->get_record('course', ['id' => SITEID]);
-        $groupprefix = (!empty($siterec)) ? $siterec->shortname : '';
+
         $objects = $DB->get_recordset_sql("SELECT *
                                              FROM {local_o365_objects}
                                             WHERE type = 'group' AND
@@ -754,11 +1377,13 @@ class acp extends base {
                         try {
                             $coursegroups->create_study_group($moodleobject->id);
                         } catch (\Exception $e) {
-                            $this->mtrace('Could not create group for Moodle group #'.$moodleobject->id.'. Reason: '.$e->getMessage());
+                            $this->mtrace('Could not create group for Moodle group #' . $moodleobject->id . '. Reason: ' .
+                                $e->getMessage());
                             continue;
                         }
                     } else {
-                        echo "Cleaning up object for Moodle group {$object->moodleid} Office 365 object id {$object->objectid}\n";
+                        echo "Cleaning up object for Moodle group " . $object->moodleid . " Microsoft 365 object id " .
+                            $object->objectid . "\n";
                     }
                 } else {
                     if (is_array($coursesenabled) && !in_array($object->moodleid, $coursesenabled)) {
@@ -773,7 +1398,7 @@ class acp extends base {
                     $DB->delete_records('local_o365_objects', ['id' => $object->id]);
                     if (!empty($course)) {
                         try {
-                            $objectrec = $coursegroups->create_group($course, $groupprefix);
+                            $objectrec = $coursegroups->create_group($course);
                             echo "Created object for Moodle course: {$course->fullname}\n";
                         } catch (\Exception $e) {
                             $this->mtrace('Could not create group for course #'.$course->id.'. Reason: '.$e->getMessage());
@@ -787,7 +1412,8 @@ class acp extends base {
                             continue;
                         }
                     } else {
-                        echo "Cleaning up object for Moodle course {$object->moodleid} Office 365 object id {$object->objectid}\n";
+                        echo "Cleaning up object for Moodle course " . $object->moodleid . " Microsoft 365 object id " .
+                            $object->objectid . "\n";
                     }
                 }
             } else {
@@ -809,14 +1435,14 @@ class acp extends base {
 
         $httpclient = new \local_o365\httpclient();
         $clientdata = \local_o365\oauth2\clientdata::instance_from_oidc();
-        $graphresource = \local_o365\rest\unified::get_resource();
+        $graphresource = \local_o365\rest\unified::get_tokenresource();
         $graphtoken = \local_o365\utils::get_app_or_system_token($graphresource, $clientdata, $httpclient);
         if (empty($graphtoken)) {
             mtrace('Could not get Microsoft Graph API token.');
             return true;
         }
         $graphclient = new \local_o365\rest\unified($graphtoken, $httpclient);
-        $coursegroups = new \local_o365\feature\usergroups\coursegroups($graphclient, $DB, true);
+        $coursegroups = new \local_o365\feature\usergroups\coursegroups($graphclient, true);
 
         $coursesenabled = \local_o365\feature\usergroups\utils::get_enabled_courses();
         if (empty($coursesenabled)) {
@@ -835,7 +1461,7 @@ class acp extends base {
             $params[] = $courseid;
         }
         if (is_array($coursesenabled)) {
-            list($coursesinsql, $coursesparams) = $DB->get_in_or_equal($coursesenabled);
+            [$coursesinsql, $coursesparams] = $DB->get_in_or_equal($coursesenabled);
             $sql .= ' AND crs.id '.$coursesinsql;
             $params = array_merge($params, $coursesparams);
         }
@@ -855,6 +1481,11 @@ class acp extends base {
         die();
     }
 
+    /**
+     * Export debug data.
+     *
+     * @return false|void
+     */
     public function mode_maintenance_debugdata() {
         global $CFG;
 
@@ -896,11 +1527,10 @@ class acp extends base {
                 'aadtenant',
                 'azuresetupresult',
                 'chineseapi',
-                'creategroups',
+                'createteams',
                 'debugmode',
                 'enableunifiedapi',
                 'disablegraphapi',
-                'fieldmap',
                 'odburl',
                 'photoexpire',
                 'usersynccreationrestriction',
@@ -1027,12 +1657,13 @@ class acp extends base {
             redirect($actionurl);
         }
 
-        require_once($CFG->libdir.'/coursecatlib.php');
-        require_once ($CFG->libdir.'/formslib.php');
+        require_once($CFG->libdir . '/coursecatlib.php');
+        require_once($CFG->libdir . '/formslib.php');
         $spcustomsynced = get_config('local_o365', 'spcustomsynced');
         $spcustomsynced = $spcustomsynced ? $spcustomsynced : false;
 
-        $PAGE->navbar->add(get_string('acp_sharepointcourseselect', 'local_o365'), new \moodle_url($this->url, ['mode' => 'sharepointcourseselect']));
+        $PAGE->navbar->add(get_string('acp_sharepointcourseselect', 'local_o365'),
+            new \moodle_url($this->url, ['mode' => 'sharepointcourseselect']));
 
         $totalcount = 0;
         $perpage = 20;
@@ -1069,7 +1700,19 @@ class acp extends base {
 
         $limitfrom = $curpage * $perpage;
         if (empty($search)) {
-            $courses = get_courses_page('all', 'c.'.$sort.' '.$sortdir, 'c.*', $totalcount, $limitfrom, $perpage);
+            $sortdir = 1;
+            if ($sortdir == 'desc') {
+                $sortdir = -1;
+            }
+            $options = [
+                'recursive' => true,
+                'sort' => [$sort => $sortdir],
+                'offset' => $limitfrom,
+                'limit' => $perpage,
+            ];
+            $topcat = \core_course_category::get(0);
+            $courses = $topcat->get_courses($options);
+            $totalcount = $topcat->get_courses_count($options);
         } else {
             $searchar = explode(' ', $search);
             $courses = get_courses_search($searchar, 'c.'.$sort.' '.$sortdir, $curpage, $perpage, $totalcount);
@@ -1088,7 +1731,7 @@ class acp extends base {
                 'onchange' => '$(this).toggleClass(\'changed\');'
             ];
 
-            $category = $DB->get_record('course_categories',array('id'=>$course->category));
+            $category = $DB->get_record('course_categories', array('id' => $course->category));
             $name = $category->name;
             array_push($categories, $name);
 
@@ -1146,7 +1789,6 @@ class acp extends base {
                 $(local_o365_spcourseschanged).each( function() { $(this).toggleClass(\'changed\'); } );
             }
         }); '."\n";
-        // $js .= '$.post(\''.$bulkendpoint->out(false).'\', data, function(data) { console.log(data); }); ';
         $js .= '} '."\n";
         $js .= '}; '."\n";
         echo \html_writer::script($js);
@@ -1159,7 +1801,8 @@ class acp extends base {
             $link = new \moodle_url('/local/o365/acp.php', $linkattrs);
             echo \html_writer::tag('h5', get_string('acp_sharepointcourseselect_syncopt', 'local_o365'));
             echo \html_writer::tag('p', get_string('acp_sharepointcourseselect_syncopt_inst', 'local_o365'));
-            echo \html_writer::empty_tag('img', ['src' => $OUTPUT->pix_url('spinner', 'local_o365'), 'alt' => 'In process...', 'class' => 'local_o365_spinner']);
+            echo \html_writer::empty_tag('img', ['src' => $OUTPUT->pix_url('spinner', 'local_o365'), 'alt' => 'In process...',
+                'class' => 'local_o365_spinner']);
             echo $OUTPUT->single_button($syncendpoint, get_string('acp_sharepointcourseselect_syncopt_btn', 'local_o365'), 'get');
             $js = '$(\'div.singlebutton :submit\').click(function() { $(\'img.local_o365_spinner\').show(); });';
             echo \html_writer::script($js);
@@ -1169,29 +1812,32 @@ class acp extends base {
         echo \html_writer::start_tag('form', ['id' => 'coursesearchform', 'method' => 'get']);
         echo \html_writer::start_tag('fieldset', ['class' => 'coursesearchbox invisiblefieldset']);
         echo \html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'mode', 'value' => 'sharepointcourseselect']);
-        echo \html_writer::empty_tag('input', ['type' => 'text', 'id' => 'coursesearchbox', 'size' => 30, 'name' => 'search', 'value' => s($search)]);
+        echo \html_writer::empty_tag('input', ['type' => 'text', 'id' => 'coursesearchbox', 'size' => 30, 'name' => 'search',
+            'value' => s($search)]);
         echo \html_writer::empty_tag('input', ['type' => 'submit', 'value' => get_string('go')]);
         echo \html_writer::div(\html_writer::tag('strong', get_string('acp_sharepointcourseselect_searchwarning', 'local_o365')));
         echo \html_writer::end_tag('fieldset');
         echo \html_writer::end_tag('form');
         echo \html_writer::empty_tag('br');
 
-        // Write instrutions for selecting courses.
+        // Write instructions for selecting courses.
         echo \html_writer::tag('h5', get_string('acp_sharepointcourseselect_instr_header', 'local_o365'));
         echo \html_writer::tag('p', get_string('acp_sharepointcourseselect_instr', 'local_o365'));
         // Begin courses table.
         echo \html_writer::tag('h5', get_string('courses'));
         echo \html_writer::table($table);
-       // URL and paging elements.
+        // URL and paging elements.
         $cururl = new \moodle_url('/local/o365/acp.php', ['mode' => 'sharepointcourseselect']);
         echo $OUTPUT->paging_bar($totalcount, $curpage, $perpage, $cururl);
          // Notification box to confirm bulk save.
-        echo \html_writer::start_tag('div', ['class' => 'alert alert-success alert-block fade in', 'id' => 'acp_sharepointcustom_savemessage', 'style' => 'display: none;', 'role' => 'alert']);
-        echo \html_writer::tag('button', '×', ['class'=>'close', 'data-dismiss' => 'alert', 'type' => 'button']);
+        echo \html_writer::start_tag('div', ['class' => 'alert alert-success alert-block fade in',
+            'id' => 'acp_sharepointcustom_savemessage', 'style' => 'display: none;', 'role' => 'alert']);
+        echo \html_writer::tag('button', '×', ['class' => 'close', 'data-dismiss' => 'alert', 'type' => 'button']);
         echo get_string('acp_sharepointcustom_savemessage', 'local_o365');
         echo \html_writer::end_tag('div');
         // Bulk save button.
-        echo  \html_writer::tag('button', get_string('savechanges'), ['class'=>'buttonsbar', 'onclick' => 'local_o365_sharepointcustom_save()']);
+        echo  \html_writer::tag('button', get_string('savechanges'),
+            ['class' => 'buttonsbar', 'onclick' => 'local_o365_sharepointcustom_save()']);
 
         $this->standard_footer();
     }
@@ -1229,14 +1875,38 @@ class acp extends base {
             echo \html_writer::div(get_string('acp_maintenance_debugdata_desc', 'local_o365'));
         }
 
+        $toolurl = new \moodle_url('/auth/oidc/cleanupoidctokens.php');
+        $toolname = get_string('cfg_cleanupoidctokens_key', 'auth_oidc');
+        echo \html_writer::empty_tag('br');
+        echo \html_writer::link($toolurl, $toolname, ['target' => '_blank']);
+        echo \html_writer::div(get_string('cfg_cleanupoidctokens_desc', 'auth_oidc'));
+
+        // Clear delta token.
+        $toolurl = new \moodle_url($this->url, ['mode' => 'maintenance_cleandeltatoken']);
+        $toolname = get_string('acp_maintenance_cleandeltatoken', 'local_o365');
+        echo \html_writer::empty_tag('br');
+        echo \html_writer::link($toolurl, $toolname);
+        echo \html_writer::div(get_string('acp_maintenance_cleandeltatoken_desc', 'local_o365'));
+
         $this->standard_footer();
+    }
+
+    /**
+     * Clean up user sync delta token.
+     */
+    public function mode_maintenance_cleandeltatoken() {
+        set_config('task_usersync_lastdeltatoken', '', 'local_o365');
+        mtrace("Cleaned up last delta token.");
+
+        set_config('task_usersync_lastskiptokendelta', '', 'local_o365');
+        mtrace("Cleaned up last skip delta token.");
     }
 
     /**
      * User connection management.
      */
     public function mode_userconnections() {
-        global $DB, $OUTPUT, $PAGE, $SESSION, $CFG;
+        global $PAGE, $CFG;
         $url = new \moodle_url($this->url, ['mode' => 'userconnections']);
         $PAGE->navbar->add(get_string('acp_userconnections', 'local_o365'), $url);
         $PAGE->requires->jquery();
@@ -1253,8 +1923,8 @@ class acp extends base {
             'email' => 1,
         ];
         $ufiltering = new \local_o365\feature\userconnections\filtering($filterfields, $searchurl);
-        list($extrasql, $params) = $ufiltering->get_sql_filter();
-        list($o365usernamesql, $o365usernameparams) = $ufiltering->get_filter_o365username();
+        [$extrasql, $params] = $ufiltering->get_sql_filter();
+        [$o365usernamesql, $o365usernameparams] = $ufiltering->get_filter_o365username();
 
         $ufiltering->display_add();
         $ufiltering->display_active();
@@ -1266,6 +1936,40 @@ class acp extends base {
         $table->out(25, true);
 
         $this->standard_footer();
+    }
+
+    /**
+     * Resync action from the userconnections tool.
+     */
+    public function mode_userconnections_resync() {
+        global $DB;
+        $userid = required_param('userid', PARAM_INT);
+        confirm_sesskey();
+
+        if (\local_o365\utils::is_configured() !== true) {
+            mtrace('Microsoft 365 not configured');
+            return false;
+        }
+
+        // Perform prechecks.
+        $userrecord = \core_user::get_user($userid, '*', MUST_EXIST);
+        $isguestuser = false;
+        if (stripos($userrecord->username, '_ext_') !== false) {
+            $isguestuser = true;
+        }
+
+        $params = ['type' => 'user', 'moodleid' => $userid];
+        $objectrecord = $DB->get_record('local_o365_objects', $params);
+        if (empty($objectrecord) || empty($objectrecord->objectid)) {
+            throw new \moodle_exception('acp_userconnections_resync_nodata', 'local_o365');
+        }
+
+        // Get aad data.
+        $usersync = new \local_o365\feature\usersync\main();
+        $userdata = $usersync->get_user($objectrecord->objectid, $isguestuser);
+        echo '<pre>';
+        $usersync->sync_users([$userdata]);
+        echo '</pre>';
     }
 
     /**
@@ -1297,13 +2001,13 @@ class acp extends base {
         if ($fromform = $mform->get_data()) {
             $o365username = trim($fromform->o365username);
 
-            // Check existing matches for Office user.
+            // Check existing matches for Microsoft user.
             $existingmatchforo365user = $DB->get_record('local_o365_connections', ['aadupn' => $o365username]);
             if (!empty($existingmatchforo365user)) {
                 throw new \moodle_exception('acp_userconnections_manualmatch_error_o365usermatched', 'local_o365');
             }
 
-            // Check existing tokens for Office 365 user (indicates o365 user is already connected to someone).
+            // Check existing tokens for Microsoft 365 user (indicates o365 user is already connected to someone).
             $existingtokenforo365user = $DB->get_record('auth_oidc_token', ['oidcusername' => $o365username]);
             if (!empty($existingtokenforo365user)) {
                 throw new \moodle_exception('acp_userconnections_manualmatch_error_o365userconnected', 'local_o365');

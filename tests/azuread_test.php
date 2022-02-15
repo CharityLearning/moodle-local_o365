@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * AzureAD test cases.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -23,9 +25,8 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-global $CFG;
-
 /**
+ * Mock AzureAD.
  * @codeCoverageIgnore
  */
 class azuread_mock extends \local_o365\rest\azuread {
@@ -51,7 +52,7 @@ class local_o365_azuread_testcase extends \advanced_testcase {
     /**
      * Perform setup before every test. This tells Moodle's phpunit to reset the database after every test.
      */
-    protected function setUp() {
+    protected function setUp() : void {
         parent::setUp();
         $this->resetAfterTest(true);
     }
@@ -77,13 +78,13 @@ class local_o365_azuread_testcase extends \advanced_testcase {
             'refreshtoken' => 'refreshtoken',
             'scope' => 'scope',
             'user_id' => '2',
-            'resource' => 'resource',
+            'tokenresource' => 'resource',
         ];
 
         $clientdata = new \local_o365\oauth2\clientdata($oidcconfig->clientid, $oidcconfig->clientsecret,
                 $oidcconfig->authendpoint, $oidcconfig->tokenendpoint);
         $token = new \local_o365\oauth2\token($tokenrec->token, $tokenrec->expiry, $tokenrec->refreshtoken,
-                $tokenrec->scope, $tokenrec->resource, $tokenrec->user_id, $clientdata, $httpclient);
+                $tokenrec->scope, $tokenrec->tokenresource, $tokenrec->user_id, $clientdata, $httpclient);
         return $token;
     }
 
@@ -94,13 +95,13 @@ class local_o365_azuread_testcase extends \advanced_testcase {
         $httpclient = new \local_o365\tests\mockhttpclient();
         $apiclient = new azuread_mock($this->get_mock_token(), $httpclient);
 
-        $requesturi = 'https://graph.windows.net/users';
-        $expecteduri = 'https://graph.windows.net/users?api-version=1.5';
+        $requesturi = 'https://graph.microsoft.com/users';
+        $expecteduri = 'https://graph.microsoft.com/users?api-version=1.5';
         $actualuri = $apiclient->transform_full_request_uri($requesturi);
         $this->assertEquals($expecteduri, $actualuri);
 
-        $requesturi = 'https://graph.windows.net/users?something';
-        $expecteduri = 'https://graph.windows.net/users?something&api-version=1.5';
+        $requesturi = 'https://graph.microsoft.com/users?something';
+        $expecteduri = 'https://graph.microsoft.com/users?something&api-version=1.5';
         $actualuri = $apiclient->transform_full_request_uri($requesturi);
         $this->assertEquals($expecteduri, $actualuri);
     }

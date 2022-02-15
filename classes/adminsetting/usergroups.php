@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Admin setting to configure user groups.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -23,7 +25,10 @@
 
 namespace local_o365\adminsetting;
 
+defined('MOODLE_INTERNAL') || die();
+
 global $CFG;
+
 require_once($CFG->dirroot.'/lib/adminlib.php');
 
 /**
@@ -53,7 +58,9 @@ class usergroups extends \admin_setting {
     /**
      * Return an XHTML string for the setting.
      *
-     * @return string Returns an XHTML string
+     * @param mixed $data
+     * @param string $query
+     * @return string
      */
     public function output_html($data, $query = '') {
         $settinghtml = '';
@@ -65,14 +72,14 @@ class usergroups extends \admin_setting {
             'onall' => get_string('acp_usergroupcustom_onall', 'local_o365'),
         ];
         $curval = (isset($options[$data])) ? $data : $this->get_defaultsetting();
-        $customenabled = get_string('acp_usergroupcustom_oncustom', 'local_o365', $customizeurl->out());
         foreach ($options as $key => $desc) {
             $radioattrs = [
                 'type' => 'radio',
                 'id' => $this->get_id().'_'.$key,
                 'name' => $this->get_full_name(),
                 'value' => $key,
-                'onchange' => 'usergroups_togglecustom()',
+                'onchange' => 'teams_togglecustom()',
+                'class' => 'local_o365_acp_option',
             ];
             if ($curval === $key) {
                 $radioattrs['checked'] = 'checked';
@@ -82,8 +89,18 @@ class usergroups extends \admin_setting {
             $settinghtml .= \html_writer::empty_tag('br');
             $settinghtml .= \html_writer::empty_tag('br');
         }
-        $js = 'function usergroups_togglecustom() { if ($("#id_s_local_o365_creategroups_oncustom").is(":checked")) { console.log("custom on"); $("#adminsetting_usergroups").show(); } else { console.log("custom off"); $("#adminsetting_usergroups").hide(); } };';
-        $js .= 'usergroups_togglecustom();';
+        $js = <<<JS
+function teams_togglecustom() {
+    if ($("#id_s_local_o365_createteams_oncustom").is(":checked")) {
+        console.log("custom on");
+        $("#adminsetting_teams").show();
+    } else {
+        console.log("custom off");
+        $("#adminsetting_teams").hide();
+    }
+};
+teams_togglecustom();
+JS;
         $settinghtml .= \html_writer::script($js);
         return format_admin_setting($this, $this->visiblename, $settinghtml, $this->description);
     }

@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Course group feature test cases.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -22,8 +24,6 @@
  */
 
 defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
 
 /**
  * Tests \local_o365\feature\usergroups\coursegroups.
@@ -35,7 +35,7 @@ class local_o365_coursegroups_testcase extends \advanced_testcase {
     /**
      * Perform setup before every test. This tells Moodle's phpunit to reset the database after every test.
      */
-    protected function setUp() {
+    protected function setUp() : void {
         parent::setUp();
         $this->resetAfterTest(true);
     }
@@ -72,12 +72,12 @@ class local_o365_coursegroups_testcase extends \advanced_testcase {
             'refreshtoken' => 'refreshtoken',
             'scope' => 'scope',
             'user_id' => '2',
-            'resource' => 'resource',
+            'tokenresource' => 'resource',
         ];
 
         $clientdata = $this->get_mock_clientdata();
         $token = new \local_o365\oauth2\token($tokenrec->token, $tokenrec->expiry, $tokenrec->refreshtoken,
-                $tokenrec->scope, $tokenrec->resource, $tokenrec->user_id, $clientdata, $httpclient);
+                $tokenrec->scope, $tokenrec->tokenresource, $tokenrec->user_id, $clientdata, $httpclient);
         return $token;
     }
 
@@ -88,17 +88,15 @@ class local_o365_coursegroups_testcase extends \advanced_testcase {
      * @return \local_o365\feature\usergroups\coursegroups Constructed coursegroups instance.
      */
     public function constructcoursegroupsinstance($httpclient) {
-        global $DB;
         $token = $this->get_mock_token();
         $graphclient = new \local_o365\rest\unified($token, $httpclient);
-        return new \local_o365\feature\usergroups\coursegroups($graphclient, $DB, false);
+        return new \local_o365\feature\usergroups\coursegroups($graphclient, false);
     }
 
     /**
      * Test create_group() method.
      */
     public function test_create_group() {
-        global $DB;
         $course = $this->getDataGenerator()->create_course();
 
          // Set up mock http client.
@@ -107,7 +105,7 @@ class local_o365_coursegroups_testcase extends \advanced_testcase {
         $httpclient->set_response(json_encode($fixedresponse));
 
         $coursegroups = $this->constructcoursegroupsinstance($httpclient);
-        $objectrec = $coursegroups->create_group($course, 'prefix 1@:-_');
+        $objectrec = $coursegroups->create_group($course); // This may need to be updated to consider the new naming settings.
 
         // Assert returned object record.
         $expectedobjectrec = [
@@ -115,7 +113,7 @@ class local_o365_coursegroups_testcase extends \advanced_testcase {
             'subtype' => 'course',
             'objectid' => 'group1',
             'moodleid' => $course->id,
-            'o365name' => 'prefix 1@:-_: '.$course->fullname,
+            'o365name' => $course->fullname,
         ];
         $this->assertEquals($expectedobjectrec, array_intersect_key($objectrec, $expectedobjectrec));
 
@@ -123,6 +121,10 @@ class local_o365_coursegroups_testcase extends \advanced_testcase {
         $requests = $httpclient->get_requests();
         $pluginversion = get_config('local_o365', 'version');
         $expecteduseragent = 'Moodle-groups-'.$pluginversion;
+        $description = strip_tags($course->summary);
+        if (strlen($description) > 1024) {
+            $description = shorten_text($description, 1024, true, ' ...');
+        }
         $expectedrequests = [
             [
                 'url' => 'https://graph.microsoft.com/v1.0/groups',
@@ -130,12 +132,13 @@ class local_o365_coursegroups_testcase extends \advanced_testcase {
                     'CURLOPT_POST' => 1,
                     'CURLOPT_POSTFIELDS' => json_encode([
                         'groupTypes' => ['Unified'],
-                        'displayName' => 'prefix 1@:-_: '.$course->fullname,
+                        'displayName' => $course->fullname,
                         'mailEnabled' => false,
                         'securityEnabled' => false,
-                        'mailNickname' => 'prefix1_tc_1',
+                        'mailNickname' => strtolower(preg_replace('/[^a-z0-9-_]+/iu', '', $course->fullname)),
                         'visibility' => 'Private',
-                        'description' => $course->summary,
+                        'resourceBehaviorOptions' => ["HideGroupInOutlook","WelcomeEmailDisabled"],
+                        'description' => $description,
                     ]),
                     'CURLOPT_USERAGENT' => $expecteduseragent,
                 ],
@@ -162,8 +165,9 @@ class local_o365_coursegroups_testcase extends \advanced_testcase {
         foreach ($users as $i => $user) {
             $tokenrec = [
                 'oidcuniqid' => 'user'.$i,
-                'resource' => 'https://graph.windows.net',
+                'tokenresource' => 'https://graph.microsoft.com',
                 'username' => $user->username,
+                'userid' => $user->id,
                 'scope' => 'User.Read',
                 'authcode' => '000',
                 'token' => '111',
@@ -203,14 +207,14 @@ class local_o365_coursegroups_testcase extends \advanced_testcase {
         $httpclient->set_response(json_encode($memberresponse));
 
         $coursegroups = $this->constructcoursegroupsinstance($httpclient);
-        list($toadd, $toremove) = $coursegroups->resync_group_membership($course->id, 'testgroupobjectid');
+        [$toadd, $toremove] = $coursegroups->resync_group_membership($course->id, 'testgroupobjectid');
 
         $pluginversion = get_config('local_o365', 'version');
         $expecteduseragent = 'Moodle-groups-'.$pluginversion;
 
         $requests = $httpclient->get_requests();
         $expectedrequests = [
-            // List request.
+            // List members request.
             [
                 'url' => 'https://graph.microsoft.com/v1.0/groups/testgroupobjectid/members',
                 'options' => [
@@ -219,9 +223,81 @@ class local_o365_coursegroups_testcase extends \advanced_testcase {
                 ],
             ],
 
-            // Remove request.
+            // List owners request.
             [
-                'url' => 'https://graph.microsoft.com/v1.0/groups/testgroupobjectid/members/user2/$ref',
+                'url' => 'https://graph.microsoft.com/v1.0/groups/testgroupobjectid/owners',
+                'options' => [
+                    'CURLOPT_HTTPGET' => '1',
+                    'CURLOPT_USERAGENT' => $expecteduseragent,
+                ],
+            ],
+
+            // Attempts to get group.
+            [
+                'url' => 'https://graph.microsoft.com/v1.0/groups/testgroupobjectid',
+                'options' => [
+                    'CURLOPT_HTTPGET' => '1',
+                    'CURLOPT_USERAGENT' => $expecteduseragent,
+                ],
+            ],
+            [
+                'url' => 'https://graph.microsoft.com/v1.0/groups/testgroupobjectid',
+                'options' => [
+                    'CURLOPT_HTTPGET' => '1',
+                    'CURLOPT_USERAGENT' => $expecteduseragent,
+                ],
+            ],
+            [
+                'url' => 'https://graph.microsoft.com/v1.0/groups/testgroupobjectid',
+                'options' => [
+                    'CURLOPT_HTTPGET' => '1',
+                    'CURLOPT_USERAGENT' => $expecteduseragent,
+                ],
+            ],
+            [
+                'url' => 'https://graph.microsoft.com/v1.0/groups/testgroupobjectid',
+                'options' => [
+                    'CURLOPT_HTTPGET' => '1',
+                    'CURLOPT_USERAGENT' => $expecteduseragent,
+                ],
+            ],            [
+                'url' => 'https://graph.microsoft.com/v1.0/groups/testgroupobjectid',
+                'options' => [
+                    'CURLOPT_HTTPGET' => '1',
+                    'CURLOPT_USERAGENT' => $expecteduseragent,
+                ],
+            ],
+            [
+                'url' => 'https://graph.microsoft.com/v1.0/groups/testgroupobjectid',
+                'options' => [
+                    'CURLOPT_HTTPGET' => '1',
+                    'CURLOPT_USERAGENT' => $expecteduseragent,
+                ],
+            ],
+
+            // Remove user1 as owner.
+            [
+                'url' => 'https://graph.microsoft.com/beta/groups/testgroupobjectid/owners/user1/$ref',
+                'options' => [
+                    'CURLOPT_CUSTOMREQUEST' => 'DELETE',
+                    'CURLOPT_USERPWD' => 'anonymous: noreply@moodle.org',
+                    'CURLOPT_USERAGENT' => $expecteduseragent,
+                ],
+            ],
+
+            // Remove user2 as owner.
+            [
+                'url' => 'https://graph.microsoft.com/beta/groups/testgroupobjectid/owners/user2/$ref',
+                'options' => [
+                    'CURLOPT_CUSTOMREQUEST' => 'DELETE',
+                    'CURLOPT_USERPWD' => 'anonymous: noreply@moodle.org',
+                    'CURLOPT_USERAGENT' => $expecteduseragent,
+                ],
+            ],
+
+            // Remove user2 as member.
+            [
+                'url' => 'https://graph.microsoft.com/beta/groups/testgroupobjectid/members/user2/$ref',
                 'options' => [
                     'CURLOPT_CUSTOMREQUEST' => 'DELETE',
                     'CURLOPT_USERPWD' => 'anonymous: noreply@moodle.org',
@@ -231,7 +307,7 @@ class local_o365_coursegroups_testcase extends \advanced_testcase {
 
             // Add request.
             [
-                'url' => 'https://graph.microsoft.com/v1.0/groups/testgroupobjectid/members/$ref',
+                'url' => 'https://graph.microsoft.com/beta/groups/testgroupobjectid/members/$ref',
                 'options' => [
                     'CURLOPT_POST' => '1',
                     'CURLOPT_POSTFIELDS' => '{"@odata.id":"https:\/\/graph.microsoft.com\/v1.0\/directoryObjects\/user0"}',
@@ -241,9 +317,9 @@ class local_o365_coursegroups_testcase extends \advanced_testcase {
         ];
         $this->assertEquals($expectedrequests, $requests);
 
-        $expectedtoadd = ['user0' => $users[0]->id];
+        $expectedtoadd = ['user0'];
         $this->assertEquals($expectedtoadd, $toadd);
-        $expectedtoremove = ['user2' => 'user2'];
+        $expectedtoremove = ['user1', 'user2'];
         $this->assertEquals($expectedtoremove, $toremove);
     }
 }

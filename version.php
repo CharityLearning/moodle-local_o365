@@ -15,19 +15,22 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Plugin version information.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
+ * @author Lai Wei <lai.wei@enovation.ie>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @copyright (C) 2014 onwards Microsoft, Inc. (http://microsoft.com/)
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version = 2017111302;
-$plugin->requires = 2017111300;
+$plugin->version = 2021051711;
+$plugin->requires = 2021051700;
+$plugin->release = '3.11.2';
 $plugin->component = 'local_o365';
 $plugin->maturity = MATURITY_STABLE;
-$plugin->release = '3.4.0.2';
 $plugin->dependencies = [
-    'auth_oidc' => 2017111301,
+    'auth_oidc' => 2021051710,
 ];

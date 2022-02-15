@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Represents an oauth2 token from the system API user.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -22,6 +24,8 @@
  */
 
 namespace local_o365\oauth2;
+
+defined('MOODLE_INTERNAL') || die();
 
 /**
  * Represents an oauth2 token from the system API user.
@@ -31,15 +35,16 @@ class systemapiusertoken extends \local_o365\oauth2\token {
      * Get stored token for a user and resourse.
      *
      * @param int $userid The ID of the user to get the token for.
-     * @param string $resource The resource to get the token for.
+     * @param string $tokenresource The resource to get the token for.
+     *
      * @return array Array of token data.
      */
-    protected static function get_stored_token($userid, $resource) {
+    protected static function get_stored_token($userid, $tokenresource) {
         $tokens = get_config('local_o365', 'systemtokens');
         $tokens = unserialize($tokens);
-        if (isset($tokens[$resource])) {
-            $tokens[$resource]['user_id'] = null;
-            return $tokens[$resource];
+        if (isset($tokens[$tokenresource])) {
+            $tokens[$tokenresource]['user_id'] = null;
+            return $tokens[$tokenresource];
         } else {
             return false;
         }
@@ -55,10 +60,10 @@ class systemapiusertoken extends \local_o365\oauth2\token {
     protected function update_stored_token($existingtoken, $newtoken) {
         $tokens = get_config('local_o365', 'systemtokens');
         $tokens = unserialize($tokens);
-        if (isset($tokens[$existingtoken['resource']])) {
-            unset($tokens[$existingtoken['resource']]);
+        if (isset($tokens[$existingtoken['tokenresource']])) {
+            unset($tokens[$existingtoken['tokenresource']]);
         }
-        $tokens[$newtoken['resource']] = $newtoken;
+        $tokens[$newtoken['tokenresource']] = $newtoken;
         $tokens = serialize($tokens);
         set_config('systemtokens', $tokens, 'local_o365');
         return true;
@@ -73,8 +78,8 @@ class systemapiusertoken extends \local_o365\oauth2\token {
     protected function delete_stored_token($existingtoken) {
         $tokens = get_config('local_o365', 'systemtokens');
         $tokens = unserialize($tokens);
-        if (isset($tokens[$existingtoken['resource']])) {
-            unset($tokens[$existingtoken['resource']]);
+        if (isset($tokens[$existingtoken['tokenresource']])) {
+            unset($tokens[$existingtoken['tokenresource']]);
         }
         $tokens = serialize($tokens);
         set_config('systemtokens', $tokens, 'local_o365');
@@ -84,14 +89,16 @@ class systemapiusertoken extends \local_o365\oauth2\token {
     /**
      * Store a new system token.
      *
+     * @param int $userid
      * @param string $token Token access token.
      * @param int $expiry Token expiry timestamp.
      * @param string $refreshtoken Token refresh token.
      * @param string $scope Token scope.
-     * @param string $resource Token resource.
+     * @param string $tokenresource Token resource.
+     *
      * @return array Array of new token information.
      */
-    public static function store_new_token($userid, $token, $expiry, $refreshtoken, $scope, $resource) {
+    public static function store_new_token($userid, $token, $expiry, $refreshtoken, $scope, $tokenresource) {
         $tokens = get_config('local_o365', 'systemtokens');
         $tokens = unserialize($tokens);
         $newtoken = [
@@ -99,9 +106,9 @@ class systemapiusertoken extends \local_o365\oauth2\token {
             'expiry' => $expiry,
             'refreshtoken' => $refreshtoken,
             'scope' => $scope,
-            'resource' => $resource,
+            'tokenresource' => $tokenresource,
         ];
-        $tokens[$resource] = $newtoken;
+        $tokens[$tokenresource] = $newtoken;
         $tokens = serialize($tokens);
         set_config('systemtokens', $tokens, 'local_o365');
         return $newtoken;

@@ -15,6 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Initialize SharePoint site.
+ *
  * @package local_o365
  * @author James McQuillan <james.mcquillan@remote-learner.net>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -22,6 +24,8 @@
  */
 
 namespace local_o365\task;
+
+defined('MOODLE_INTERNAL') || die();
 
 /**
  * Initialize SharePoint site.
@@ -59,6 +63,11 @@ class sharepointinit extends \core\task\adhoc_task {
         */
     }
 
+    /**
+     * Call Graph API to initialise SharePoint.
+     *
+     * @return bool|void
+     */
     protected function execute_graph() {
         global $DB;
         mtrace('SharePoint Init using Graph API...');
@@ -66,8 +75,8 @@ class sharepointinit extends \core\task\adhoc_task {
         try {
             $clientdata = \local_o365\oauth2\clientdata::instance_from_oidc();
             $httpclient = new \local_o365\httpclient();
-            $resource = \local_o365\rest\unified::get_resource();
-            $token = \local_o365\utils::get_app_or_system_token($resource, $clientdata, $httpclient);
+            $tokenresource = \local_o365\rest\unified::get_tokenresource();
+            $token = \local_o365\utils::get_app_or_system_token($tokenresource, $clientdata, $httpclient);
             if (empty($token)) {
                 throw new \moodle_exception('erroracpnosptoken', 'local_o365');
             }
@@ -116,7 +125,8 @@ class sharepointinit extends \core\task\adhoc_task {
                             $moodlesitename = $frontpagerec->shortname;
                         }
                         mtrace('Setting parent site to "'.$currentparentsite.'", creating subsite "'.$partialurl.'"');
-                        $result = $apiclient->sharepoint_create_site($parsedurl['host'], $currentparentsite, $moodlesitename, $moodlesitedesc);
+                        $result = $apiclient->sharepoint_create_site($parsedurl['host'], $currentparentsite, $moodlesitename,
+                            $moodlesitedesc);
                         mtrace('Created parent site "'.$currentparentsite.'"');
                     } else {
                         mtrace('Parent site "'.$currentparentsite.'" already exists.');
@@ -168,21 +178,26 @@ class sharepointinit extends \core\task\adhoc_task {
         }
     }
 
+    /**
+     * Call legacy API to initialise SharePoint.
+     *
+     * @return bool|void
+     */
     protected function execute_legacy() {
         global $DB;
         mtrace('SharePoint Init using Legacy API...');
 
         // API Setup.
         try {
-            $spresource = \local_o365\rest\sharepoint::get_resource();
-            if (empty($spresource)) {
+            $sharepointtokenpresource = \local_o365\rest\sharepoint::get_tokenresource();
+            if (empty($sharepointtokenpresource)) {
                 throw new \moodle_exception('erroracplocalo365notconfig', 'local_o365');
             }
 
             $httpclient = new \local_o365\httpclient();
             $clientdata = \local_o365\oauth2\clientdata::instance_from_oidc();
 
-            $sptoken = \local_o365\utils::get_app_or_system_token($spresource, $clientdata, $httpclient);
+            $sptoken = \local_o365\utils::get_app_or_system_token($sharepointtokenpresource, $clientdata, $httpclient);
             if (empty($sptoken)) {
                 throw new \moodle_exception('erroracpnosptoken', 'local_o365');
             }
